@@ -74,17 +74,10 @@
   <div id="bootBanner" class="banner warn">Booting from <code>truesight.me/programs/butterfly-effect/manifest.json</code>…</div>
 
   <section id="identityCard" style="display:none;">
-    <h2>Your DAO identity</h2>
+    <h2>Signed in</h2>
     <div id="identityBody"></div>
     <div class="key-actions">
-      <button id="signOutBtn" class="secondary">Sign out (clear local key)</button>
-      <button id="showKeysBtn" class="secondary">Show keys</button>
-    </div>
-    <div id="keysReveal" style="display:none;margin-top:.75rem;">
-      <div class="label">Public key</div>
-      <div class="key-block" id="pubKeyView"></div>
-      <div class="label">Private key (keep secret — only stored in this browser)</div>
-      <div class="key-block" id="privKeyView"></div>
+      <button id="signOutBtn" class="secondary">Sign out</button>
     </div>
   </section>
 
@@ -102,7 +95,7 @@
 
   <section id="queueCard" style="display:none;">
     <h2>Attestation queue <span id="queueCount" class="pill"></span></h2>
-    <p class="small">Click <strong>Attest</strong> on a row to sign a <code>[CREDENTIALING ATTESTATION EVENT]</code> with your local key. The central tokenomics handler picks up the event, commits to <code>lineage-credentials</code>, and back-fills this row's audit columns.</p>
+    <p class="small">Click <strong>Attest</strong> on a row to confirm that participant has completed the program. Their credential profile will be live within a minute.</p>
     <div id="queueBody"></div>
     <button id="refreshQueueBtn" class="secondary" style="margin-top:.6rem;">Refresh queue</button>
   </section>
@@ -110,7 +103,7 @@
   <section id="publicCard" style="display:none;">
     <h2>Public information</h2>
     <p>This page is the administrative console for the Butterfly Effect program (ERA Professionals × TrueSight DAO). It's only useful to people who manage the cohort roster.</p>
-    <p>If you're a participant, your credential lives at <code>truesight.me/programs/butterfly-effect/credentials/#&lt;your-pk-hash&gt;</code> once it's been issued. Scan the QR on your printed certificate to land there.</p>
+    <p>If you're a participant, scan the QR code on your printed certificate to view your credential profile on truesight.me.</p>
     <p>Program homepage: <a href="https://truesight.me/programs/butterfly-effect/" target="_blank">truesight.me/programs/butterfly-effect/</a></p>
   </section>
 
@@ -297,7 +290,7 @@ async function boot() {
   if (!pub || !priv) {
     document.getElementById('keygenCard').style.display = 'block';
     document.getElementById('publicCard').style.display = 'block';
-    setMode('public', 'No local key — register to access admin features');
+    setMode('public', 'Sign in to continue');
     return;
   }
 
@@ -331,7 +324,7 @@ async function boot() {
     document.getElementById('queueCard').style.display = 'block';
     await loadQueue();
   } else {
-    setMode('public', identity.registered ? 'Registered DAO contributor' : 'Awaiting key registration');
+    setMode('public', identity.registered ? 'Signed in' : 'Awaiting email verification');
     document.getElementById('publicCard').style.display = 'block';
   }
 }
@@ -344,24 +337,18 @@ function setMode(mode, label) {
 
 async function renderIdentityCard(pub, priv) {
   document.getElementById('identityCard').style.display = 'block';
-  const pkHash = await pubKeyHash(pub);
   const body = document.getElementById('identityBody');
+  const verified = identity.registered;
   body.innerHTML =
-    '<div><span class="label">Name</span> ' + escapeHtml(identity.name || '<em>unregistered</em>') + '</div>' +
-    '<div><span class="label">Email</span> ' + escapeHtml(identity.email || '<em>unknown</em>') + '</div>' +
-    '<div><span class="label">pk-hash</span> <code>' + pkHash + '</code></div>' +
-    '<div><span class="label">Edgar registration</span> ' + (identity.registered ? '<span class="pill success">active</span>' : '<span class="pill warn">not registered</span>') + '</div>';
+    '<div><span class="label">Name</span> ' + escapeHtml(identity.name || '<em>(awaiting verification)</em>') + '</div>' +
+    '<div><span class="label">Email</span> ' + escapeHtml(identity.email || '<em>(unknown)</em>') + '</div>' +
+    '<div><span class="label">Status</span> ' + (verified ? '<span class="pill success">verified</span>' : '<span class="pill warn">check your inbox</span>') + '</div>';
 
-  document.getElementById('pubKeyView').textContent = pub;
-  document.getElementById('privKeyView').textContent = priv;
-  document.getElementById('showKeysBtn').onclick = function () {
-    const r = document.getElementById('keysReveal');
-    r.style.display = r.style.display === 'none' ? 'block' : 'none';
-  };
   document.getElementById('signOutBtn').onclick = function () {
-    if (!confirm('Clear your local key? You can re-register but losing the key means losing this identity.')) return;
+    if (!confirm('Sign out of this browser? You can sign in again with the same email.')) return;
     localStorage.removeItem(LS_PUB);
     localStorage.removeItem(LS_PRIV);
+    localStorage.removeItem(LS_EMAIL);
     location.reload();
   };
 }
