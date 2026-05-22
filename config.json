@@ -14,6 +14,14 @@
   },
   "schema_url": "https://github.com/TrueSightDAO/butterfly-effect-club/blob/main/SCHEMA.md",
   "config_url": "https://raw.githubusercontent.com/TrueSightDAO/butterfly-effect-club/main/config.json",
+  "cert_template": {
+    "base_url": "https://raw.githubusercontent.com/TrueSightDAO/butterfly-effect-club/main/cert_template/",
+    "cert_config": "cert_config.json",
+    "pdf_template": "cert_template.pdf",
+    "logo": "logo.png",
+    "fonts": ["fonts/EBGaramond-Italic-VariableFont_wght.ttf"],
+    "_note": "Migrated from lineage-engine/scripts/program_assets/butterfly-effect/ 2026-05-22. lineage-engine's build_cv_cache.py will be updated to fetch from these URLs in a follow-up PR; until then it still reads its local vendored copy."
+  },
   "trust_source": "sheet_editors",
   "_trust_source_note": "v1 trust circle = whoever is an editor on the roster sheet. Both the admin panel (auth gate) and the central tokenomics handler (signature verification) resolve attestor authority via the GAS proxy's list_editors endpoint. No static authorized_attestors[] list to maintain.",
   "lineage_credentials": {
