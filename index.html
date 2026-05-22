@@ -359,12 +359,14 @@ async function boot() {
   await renderIdentityCard(pub, priv);
 
   // Admin check (only if central endpoint deployed)
+  let resolveError = null;
   if (hasEndpoint && identity.email) {
     try {
       const resolved = await callCentralGAS('resolve_admin', { sheet_url: manifest.roster_sheet_url, email: identity.email });
       isAdmin = !!resolved.is_admin;
     } catch (err) {
       console.warn('resolve_admin failed:', err);
+      resolveError = err;
     }
   }
 
@@ -378,10 +380,26 @@ async function boot() {
     setMode('admin', 'Admin');
     document.getElementById('queueCard').style.display = 'block';
     await loadQueue();
+  } else if (resolveError && identity.registered) {
+    // Endpoint exists but call failed — most likely OAuth scope not yet
+    // authorized in the Apps Script project. Show the queue card with a
+    // setup-needed message rather than dropping to public mode.
+    setMode('public', 'Setup pending');
+    document.getElementById('queueCard').style.display = 'block';
+    const msg = String(resolveError.message || '');
+    const looksLikeAuth = msg === 'not_ready' || msg.toLowerCase().indexOf('permission') !== -1 || msg.indexOf('500') !== -1;
+    if (looksLikeAuth) {
+      document.getElementById('queueBody').innerHTML =
+        '<p class="banner warn"><strong>Admin queue is one operator step away.</strong> ' +
+        'Once an operator runs the one-time authorization in the Apps Script editor ' +
+        '(<code>paAuthorize</code> function · <a href="https://script.google.com/home/projects/1Dj3-m_ejxYJ4UQK2zNadnqNHJIvPQfj-VYvH9_Gnap6MYRmOJhK3B0VR/edit" target="_blank">open editor →</a>), ' +
+        'reload this page and the queue will appear.</p>';
+    } else {
+      document.getElementById('queueBody').innerHTML =
+        '<p class="banner warn">The attestation queue is temporarily unavailable. Try again shortly.</p>';
+    }
+    document.getElementById('refreshQueueBtn').style.display = 'none';
   } else if (!hasEndpoint && identity.registered) {
-    // Endpoint not yet wired — we can't tell whether they're an admin. Show the
-    // queue card with a friendly "being set up" message rather than treating
-    // them as public-only.
     setMode('public', 'Signed in');
     document.getElementById('queueCard').style.display = 'block';
     document.getElementById('queueBody').innerHTML =
