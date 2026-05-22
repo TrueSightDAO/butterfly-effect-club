@@ -51,6 +51,15 @@
     button:disabled { opacity: .45; cursor: not-allowed; }
     button.secondary { background: white; color: var(--primary); }
     button.secondary:hover:not(:disabled) { background: var(--secondary); }
+    .tabs { display: flex; gap: .25rem; border-bottom: 2px solid var(--border); margin-bottom: 0; }
+    .tab { padding: .55rem 1rem; cursor: pointer; border: none; background: none; color: var(--muted); font-weight: 600; font-size: .9rem; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: color .15s, border-color .15s; }
+    .tab:hover { color: var(--primary); }
+    .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .tab .count { display: inline-block; padding: .05rem .4rem; margin-left: .35rem; border-radius: 999px; font-size: .7rem; background: var(--secondary); color: var(--primary-dark); }
+    .tab.active .count { background: var(--primary); color: white; }
+    section.tabbed { padding: 0; overflow: hidden; }
+    section.tabbed .tab-panel { padding: 1.1rem 1.4rem; }
+    section.tabbed .tab-panel.hidden { display: none; }
     code { background: var(--secondary); padding: .1rem .35rem; border-radius: 3px; font-size: .85em; word-break: break-all; }
     a { color: var(--primary); text-decoration: none; border-bottom: 1px dotted currentColor; }
     a:hover { border-bottom-style: solid; }
@@ -93,21 +102,24 @@
     <p class="small" style="margin-top:1rem;">Same sign-in as <a href="https://dapp.truesight.me" target="_blank">dapp.truesight.me</a> — local to this browser.</p>
   </section>
 
-  <section id="queueCard" style="display:none;">
-    <h2>Attestation queue <span id="queueCount" class="pill"></span></h2>
-    <p class="small">Click <strong>Attest</strong> on a row to confirm that participant has completed the program. Their credential profile will be live within a minute. · <a id="rosterSheetLink" href="#" target="_blank">Open the source sheet ↗</a></p>
-    <div id="queueBody"></div>
-    <div style="margin-top:.6rem;display:flex;gap:.4rem;flex-wrap:wrap;">
-      <button id="refreshQueueBtn" class="secondary">Refresh queue</button>
-      <button id="processNowBtn" class="secondary" title="Manually trigger the central handler to commit any pending attestation events to lineage-credentials and back-fill the sheet">Process pending events</button>
-      <span id="processNowStatus" class="small" style="align-self:center;"></span>
+  <section id="queueCard" class="tabbed" style="display:none;">
+    <div class="tabs">
+      <button class="tab active" data-tab="pending">Pending<span id="queueCount" class="count"></span></button>
+      <button class="tab" data-tab="attested">Already attested<span id="attestedCount" class="count"></span></button>
     </div>
-  </section>
-
-  <section id="attestedCard" style="display:none;">
-    <h2>Already attested <span id="attestedCount" class="pill"></span></h2>
-    <p class="small">Participants whose credentials are live. Click a row to open their public profile.</p>
-    <div id="attestedBody"></div>
+    <div class="tab-panel" id="pendingPanel">
+      <p class="small">Click <strong>Attest</strong> on a row to confirm that participant has completed the program. Their credential profile will be live within a minute. · <a id="rosterSheetLink" href="#" target="_blank">Open the source sheet ↗</a></p>
+      <div id="queueBody"></div>
+      <div style="margin-top:.6rem;display:flex;gap:.4rem;flex-wrap:wrap;">
+        <button id="refreshQueueBtn" class="secondary">Refresh queue</button>
+        <button id="processNowBtn" class="secondary" title="Manually trigger the central handler to commit any pending attestation events to lineage-credentials and back-fill the sheet">Process pending events</button>
+        <span id="processNowStatus" class="small" style="align-self:center;"></span>
+      </div>
+    </div>
+    <div class="tab-panel hidden" id="attestedPanel">
+      <p class="small">Participants whose credentials are live. Click <strong>View ↗</strong> to open their public profile.</p>
+      <div id="attestedBody"></div>
+    </div>
   </section>
 
   <section id="publicCard" style="display:none;">
@@ -389,7 +401,6 @@ async function boot() {
   if (isAdmin) {
     setMode('admin', 'Admin');
     document.getElementById('queueCard').style.display = 'block';
-    document.getElementById('attestedCard').style.display = 'block';
     await loadQueue();
     await loadAttested();
   } else if (resolveError && identity.registered) {
@@ -648,6 +659,16 @@ document.getElementById('emailInput').addEventListener('keydown', function (ev) 
 
 document.getElementById('refreshQueueBtn').onclick = function () { loadQueue(); loadAttested(); };
 document.getElementById('processNowBtn').onclick = processPendingEvents;
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(function (btn) {
+  btn.onclick = function () {
+    const tab = this.dataset.tab;
+    document.querySelectorAll('.tab').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === tab); });
+    document.getElementById('pendingPanel').classList.toggle('hidden', tab !== 'pending');
+    document.getElementById('attestedPanel').classList.toggle('hidden', tab !== 'attested');
+  };
+});
 
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, function (c) {
