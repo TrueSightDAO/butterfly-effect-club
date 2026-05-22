@@ -540,17 +540,7 @@ function renderQueue() {
   html += '<th>Row</th><th>Name</th><th>School</th><th>Type</th><th>Graduation</th><th>Status</th><th></th>';
   html += '</tr></thead><tbody>';
   queueRows.forEach(function (r, i) {
-    const status = (r.status || r.Status || '').toLowerCase();
-    const rowClass = status === 'failed' ? 'failed' : (r._inFlight ? 'in-flight' : '');
-    html += '<tr class="' + rowClass + '">';
-    html += '<td>' + escapeHtml(String(r._row || '')) + '</td>';
-    html += '<td>' + escapeHtml(r.Name || '') + '</td>';
-    html += '<td>' + escapeHtml(r.School || '') + '</td>';
-    html += '<td>' + escapeHtml(r['Learner Type'] || '') + '</td>';
-    html += '<td>' + escapeHtml(r['Graduation Date'] || '') + '</td>';
-    html += '<td>' + escapeHtml(status || 'pending') + '</td>';
-    html += '<td><button data-idx="' + i + '" class="attest-btn"' + (r._inFlight ? ' disabled' : '') + '>Attest</button></td>';
-    html += '</tr>';
+    html += '<tr id="queue-row-' + i + '">' + renderQueueRowCells(r, i) + '</tr>';
   });
   html += '</tbody></table>';
   body.innerHTML = html;
@@ -559,14 +549,52 @@ function renderQueue() {
   });
 }
 
+function renderQueueRowCells(r, i) {
+  const status = (r.status || r.Status || '').toLowerCase();
+  let actionCell;
+  if (r._inFlight) {
+    actionCell = '<span class="small" style="color:var(--muted);">submitting…</span>';
+  } else if (status === 'submitted' || status === 'processed') {
+    const url = r.profile_url || '';
+    actionCell = url
+      ? '<a href="' + escapeHtml(url) + '" target="_blank" class="small">✓ submitted · View →</a>'
+      : '<span class="small" style="color:var(--success);">✓ submitted</span>';
+  } else if (r._error) {
+    actionCell = '<button data-idx="' + i + '" class="attest-btn secondary" title="' + escapeHtml(r._error) + '">Retry</button>';
+  } else {
+    actionCell = '<button data-idx="' + i + '" class="attest-btn">Attest</button>';
+  }
+  return '<td>' + escapeHtml(String(r._row || '')) + '</td>' +
+    '<td>' + escapeHtml(r.Name || '') + '</td>' +
+    '<td>' + escapeHtml(r.School || '') + '</td>' +
+    '<td>' + escapeHtml(r['Learner Type'] || '') + '</td>' +
+    '<td>' + escapeHtml(r['Graduation Date'] || '') + '</td>' +
+    '<td>' + escapeHtml(status || 'pending') + '</td>' +
+    '<td>' + actionCell + '</td>';
+}
+
+function refreshQueueRow(i) {
+  const tr = document.getElementById('queue-row-' + i);
+  if (!tr) return;
+  const r = queueRows[i];
+  const status = (r.status || r.Status || '').toLowerCase();
+  tr.className = status === 'failed' ? 'failed' : (r._inFlight ? 'in-flight' : (status === 'submitted' || status === 'processed' ? 'processed' : ''));
+  tr.innerHTML = renderQueueRowCells(r, i);
+  // Re-bind any new attest button in this row
+  tr.querySelectorAll('.attest-btn').forEach(function (btn) {
+    btn.onclick = function () { attestRow(parseInt(this.dataset.idx, 10)); };
+  });
+}
+
 async function attestRow(idx) {
   const row = queueRows[idx];
   if (!row || row._inFlight) return;
   row._inFlight = true;
-  renderQueue();
+  row._error = null;
+  refreshQueueRow(idx);  // update just this row, not the whole table
   const pub = localStorage.getItem(LS_PUB);
   const priv = localStorage.getItem(LS_PRIV);
-  const attesteePk = await generateKeyPair(); // mint fresh per-attestee placeholder
+  const attesteePk = await generateKeyPair();
   const attesteeHash = await pubKeyHash(attesteePk.publicKeyB64);
   const profileUrl = 'https://truesight.me/programs/butterfly-effect/credentials/#' + attesteeHash;
   const attrs = {
@@ -596,14 +624,12 @@ async function attestRow(idx) {
     row['pk_hash'] = attesteeHash;
     row['profile_url'] = profileUrl;
     row['attestation_tx_id'] = result.txId;
-    renderQueue();
-    // Pulse a refresh after a delay so the central handler's back-fill lands
-    setTimeout(function () { loadQueue(); }, 8000);
+    refreshQueueRow(idx);  // in-place update — no table re-render, no scroll jump
   } catch (err) {
     row._inFlight = false;
     row._error = err.message;
-    renderQueue();
-    alert('Attestation failed for ' + (row.Name || 'row ' + row._row) + ': ' + err.message);
+    refreshQueueRow(idx);
+    // Inline retry button (no alert popup interruption)
   }
 }
 
