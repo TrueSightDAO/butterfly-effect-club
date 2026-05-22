@@ -353,10 +353,16 @@ async function renderIdentityCard(pub, priv) {
   document.getElementById('identityCard').style.display = 'block';
   const body = document.getElementById('identityBody');
   const verified = identity.registered;
+  const displayName = identity.name
+    ? escapeHtml(identity.name)
+    : '<em class="small">(awaiting verification)</em>';
+  const displayEmail = identity.email
+    ? escapeHtml(identity.email)
+    : '<em class="small">(not yet linked — sign out and try again)</em>';
   body.innerHTML =
-    '<div><span class="label">Name</span> ' + escapeHtml(identity.name || '<em>(awaiting verification)</em>') + '</div>' +
-    '<div><span class="label">Email</span> ' + escapeHtml(identity.email || '<em>(unknown)</em>') + '</div>' +
-    '<div><span class="label">Status</span> ' + (verified ? '<span class="pill success">verified</span>' : '<span class="pill warn">check your inbox</span>') + '</div>';
+    '<div><span class="label">Name</span> ' + displayName + '</div>' +
+    '<div><span class="label">Email</span> ' + displayEmail + '</div>' +
+    '<div><span class="label">Status</span> ' + (verified ? '<span class="pill success">verified</span>' : '<span class="pill warn">check your inbox for the verification link</span>') + '</div>';
 
   document.getElementById('signOutBtn').onclick = function () {
     if (!confirm('Sign out of this browser? You can sign in again with the same email.')) return;
