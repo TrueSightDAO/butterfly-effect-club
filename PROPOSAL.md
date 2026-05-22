@@ -1,12 +1,24 @@
 # Butterfly Effects Club — Credentialing Platform Proposal
 
 **Date:** 2026-05-22
-**Author:** Kimi (TrueSight DAO AI Agent)
-**Status:** Draft — pending Gary Teh review
+**Authors:** Multi-model (cross-consolidation draft)
+**Status:** Draft — pending Gary Teh review & cross-model consolidation (Claude, Kimi, DeepSeek)
 **Related docs:**
 - [`CREDENTIALING_PLATFORM.md`](../agentic_ai_context/CREDENTIALING_PLATFORM.md)
 - [`CREDENTIALING_PROGRAM_PAGES.md`](../agentic_ai_context/CREDENTIALING_PROGRAM_PAGES.md)
 - [`BUTTERFLY_EFFECT_COHORT_ONBOARDING_PLAN.md`](../agentic_ai_context/BUTTERFLY_EFFECT_COHORT_ONBOARDING_PLAN.md)
+
+---
+
+## Authorship Key
+
+| Marker | Author | Model |
+|--------|--------|-------|
+| `[K]` | Kimi | Kimi |
+| `[D]` | AI coding assistant (OpenCode) | DeepSeek (deepseek-v4-pro) |
+| `[C]` | Claude | Claude (when added) |
+
+Sections without a marker are shared/collaborative base. Marked additions flag areas where models diverge on approach — to be resolved during consolidation.
 
 ---
 
@@ -99,6 +111,8 @@ ERA Sheet Row
 
 ### 4.1 Authentication model
 
+> **[D → see §14 for alternative: Google Sheet editor permission check as primary gate, with static `admins.json` as fallback for DAO-side operators.]**
+
 The panel is a **static GitHub Pages site**. It cannot run a backend or send emails. Authentication uses a **static allowlist** (`admins.json` in the repo):
 
 ```json
@@ -164,7 +178,9 @@ Admin logs into panel
 
 ---
 
-## 5. Python Onboarding Script (`scripts/onboard_cohort.py`)
+## 5. [K] Python Onboarding Script (`scripts/onboard_cohort.py`)
+
+> **[D → see §11 for alternative: Edgar → Telegram Chat Logs → GAS scanner pipeline, reusing the existing production event-processing pattern for audit trail consistency.]**
 
 ### 5.1 What it does
 
@@ -344,3 +360,216 @@ This mirrors the existing **"DApp Remarks"** pattern (`1eiqZr3LW-qEI6Hmy0Vrur_8f
 - `dao_client` crypto primitives: `../dao_client/truesight_dao_client/edgar_client.py`
 - Lineage credentials data repo: `TrueSightDAO/lineage-credentials`
 - Lineage engine build scripts: `TrueSightDAO/lineage-engine`
+
+---
+
+## 11. [D] Alternative: Edgar → GAS Scanner Pipeline (vs. Python Script)
+
+### 11.1 Rationale
+
+[K] §5 proposes a Python script that writes directly to `lineage-credentials` via GitHub API. [D] proposes routing both events through **Edgar → Telegram Chat Logs → GAS scanner**, mirroring the existing production pattern used by `[RETAIL FIELD REPORT EVENT]`, `[DAPP PERMISSION CHANGE EVENT]`, and `[PARTNER CHECK-IN EVENT]`.
+
+**Why Edgar-routed vs script-direct:**
+
+| Concern | Python script (direct) | Edgar → GAS scanner |
+|---------|----------------------|---------------------|
+| Audit trail | Script logs only | Telegram Chat Logs (universal ledger) + sheet audit tab |
+| Signature verification | Manual (script checks format) | Edgar verifies RSA-SHA256 before persisting |
+| Idempotency | Script-side dup check | Telegram Update ID — battle-tested, survives restarts |
+| Replay immunity | None — re-run produces duplicates | Edgar's update_id is unique per event; GAS dedup is automatic |
+| Scalability to other programs | Clone-and-tweak script per program | New event type + same pipeline — reusable |
+| Real-time processing | Requires cron / manual run | Webhook-triggered within seconds of Edgar persist |
+
+### 11.2 GAS Scanner Design (`butterfly_effect_handler.gs`)
+
+**Location:** `tokenomics/google_app_scripts/credentialing/butterfly_effect_handler.gs`
+**Trigger:** `?action=process_butterfly_effect` — called by Edgar webhook after event lands in Telegram Chat Logs.
+
+```
+doGet(e)
+  ├─ Acquire LockService.getScriptLock()   ← prevents concurrent webhook races
+  ├─ Read trailing 200 rows of Telegram Chat Logs
+  ├─ For each row matching [BUTTERFLY EFFECT PROFILE EVENT]:
+  │   ├─ Dedup check: Telegram Update ID in ERA sheet? → skip
+  │   ├─ Verify RSA signature (independent re-check, not trusting Edgar)
+  │   ├─ Parse fields: Name → derive slug, School, Learner Type, Graduation Date
+  │   ├─ Commit identity.json + practice/ to lineage-credentials via GitHub API
+  │   ├─ Trigger build-cv-cache.yml workflow (gh workflow run)
+  │   ├─ Write ERA sheet row: status=profile_created, URLs populated
+  │   └─ Append Audit Trail tab row
+  ├─ For each row matching [BUTTERFLY EFFECT CERTIFICATE EVENT]:
+  │   ├─ Dedup, verify sig
+  │   ├─ Set cv.programs.butterfly-effect.status = "completed"
+  │   ├─ Set cv.programs.butterfly-effect.locked_at = Completion Date
+  │   ├─ Commit updated CV to lineage-credentials
+  │   ├─ Trigger build-cv-cache.yml
+  │   ├─ Write ERA sheet row: status=certificate_issued, cert URL populated
+  │   └─ Append audit log
+  └─ Release lock
+```
+
+Reuses existing helpers from the tokenomics project:
+- `commitJsonToGithub_()` from `dao_members_cache_publisher.gs`
+- `LockService.getScriptLock()` serialization pattern
+- Dedup via Telegram Update ID (same as `process_retail_field_reports_telegram_logs.gs`)
+
+### 11.3 Edgar Integration
+
+Add two dispatch branches in `sentiment_importer/config/application.rb` and `dao_controller.rb`:
+
+```ruby
+# application.rb
+config.butterfly_effect_webhook_url = \
+  "https://script.google.com/macros/s/<deployment-id>/exec?action=process_butterfly_effect"
+```
+
+Edgar pattern-matches on `[BUTTERFLY EFFECT PROFILE EVENT]` and `[BUTTERFLY EFFECT CERTIFICATE EVENT]`, fires the webhook, and the GAS handler dispatches internally based on the event type string.
+
+Deploy: `./deploy.sh` on the sentiment_importer host after merge.
+
+---
+
+## 12. [D] Detailed Event Payload Formats
+
+Both events are submitted as signed text via `POST /dao/submit_contribution` — same RSA-SHA256 signing, same multipart format, same Edgar verification as every other DApp event.
+
+### 12.1 `[BUTTERFLY EFFECT PROFILE EVENT]`
+
+```text
+[BUTTERFLY EFFECT PROFILE EVENT]
+- Name: Maria Santos
+- School: ERA Academy Lahore
+- Learner Type: Student
+- Graduation Date: 2026-06-15
+- Program Slug: butterfly-effect
+- Program Year: 2025–2026
+- Public Key: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...  (optional — from admin keygen)
+- Submitted At: 2026-05-22T14:00:00Z
+- Submission Source: https://butterfly-effect-club.truesight.me/operator.html
+--------
+
+My Digital Signature: <SPKI base64>
+Request Transaction ID: <RSA-SHA256 signature, base64>
+This submission was generated using https://butterfly-effect-club.truesight.me/operator.html
+Verify submission here: https://dapp.truesight.me/verify_request.html
+```
+
+| Field | Required | Notes |
+|--------|----------|-------|
+| `Name` | yes | Display name → `identity.json.names[0]` |
+| `School` | yes | ERA partner school → `identity.json.metadata` |
+| `Learner Type` | yes | `Student` or `Teacher` → credential template dispatch |
+| `Graduation Date` | yes | ISO date; may be future for current students |
+| `Program Slug` | yes | Always `butterfly-effect` |
+| `Program Year` | yes | e.g. `2025–2026`, `2024–2025` — drives cert template year |
+| `Public Key` | no | Base64 SPKI from admin keygen; if absent, slug derived from name only |
+| `Submitted At` | yes | ISO 8601 UTC |
+| `Submission Source` | yes | Originating page URL (CLI or panel) |
+
+### 12.2 `[BUTTERFLY EFFECT CERTIFICATE EVENT]`
+
+```text
+[BUTTERFLY EFFECT CERTIFICATE EVENT]
+- Member Slug: maria-santos
+- Program Slug: butterfly-effect
+- Attested By: Bilal
+- Completion Date: 2026-06-15
+- Submitted At: 2026-05-22T15:00:00Z
+- Submission Source: https://butterfly-effect-club.truesight.me/operator.html
+--------
+
+My Digital Signature: <SPKI base64>
+Request Transaction ID: <RSA-SHA256 signature, base64>
+...
+```
+
+| Field | Required | Notes |
+|--------|----------|-------|
+| `Member Slug` | yes | Matches slug from Event 1; links cert to profile |
+| `Program Slug` | yes | Always `butterfly-effect` |
+| `Attested By` | yes | Program lead / attestor display name |
+| `Completion Date` | yes | ISO date participant completed |
+| `Submitted At` | yes | ISO 8601 UTC |
+| `Submission Source` | yes | Originating page URL |
+
+---
+
+## 13. [D] Self-Serve Participant Key Generation
+
+[K] §4.2 proposes admin-initiated key generation (admin generates keys, sends via WhatsApp). [D] proposes adding a **self-serve path** alongside:
+
+**`create_signature.html`** — stripped-down copy of `dapp/create_signature.html`:
+- **Keep:** RSA-2048 key generation, email registration, verification loopback
+- **Remove:** TDG voting rights cash-out, governor chat, inventory management, notarize
+- **Add:** "Claim your credential" step — after email verification, check if the verified email matches a row on the ERA roster; auto-link public key to that record
+
+**When to use which path:**
+
+| Path | Use case |
+|------|----------|
+| Admin keygen (WhatsApp DM) | Students without email, younger participants, batch onboarding |
+| Self-serve (create_signature.html) | Teachers, older students with email, participants wanting direct account control |
+
+Both paths converge on the same `identity.json` schema — the only difference is who generates the keypair.
+
+---
+
+## 14. [D] Admin Detection via Google Sheet Permissions
+
+[K] §4.1 proposes a static `admins.json` allowlist. [D] proposes an **alternative** (or complementary) approach: check whether the authenticated user is an **editor of the ERA Google Sheet**.
+
+**Implementation:**
+- Lightweight GAS endpoint on the ERA sheet's bound script: `?action=check_editor&email=user@gmail.com`
+- Returns `{ is_editor: true/false }` by checking the sheet's editors list
+- The landing page calls this after authentication; if `true`, renders the operator dashboard instead of the student view
+
+**Advantage over static `admins.json`:**
+- No manual allowlist maintenance — when ERA adds/removes team members from the sheet, the admin panel updates automatically
+- ERA's existing permission model (who can edit the roster) becomes the admin gate
+- No extra GitHub API call or PR cycle to grant/revoke access
+
+**Security note:** This requires the GAS endpoint to verify the caller's identity (not just accept any email parameter). Pair with a signed challenge-response using the caller's RSA key.
+
+**Recommendation:** Use both. Static `admins.json` for the DAO-side operators (Gary Teh) who may not be ERA sheet editors. Sheet editor check for ERA's team (Bilal and staff). The panel renders admin mode if either gate passes.
+
+---
+
+## 15. [D] GitHub Pages & CNAME Setup
+
+Follows the existing pattern (`capoeira.agroverse.shop`, `mirim-bahia.truesight.me`):
+
+1. Repo: `TrueSightDAO/butterfly-effect-club`
+2. Settings → Pages → Source: `main` branch, root directory
+3. Custom domain: `butterfly-effect-club.truesight.me`
+4. CNAME file in repo root: `butterfly-effect-club.truesight.me`
+5. DNS: Add CNAME record `butterfly-effect-club` → `truesightdao.github.io` on truesight.me's DNS provider
+
+**Naming convention:** Singular `-club` (not plural `-club`) to match existing convention — program slug is `butterfly-effect` everywhere: `truesight_me/programs/butterfly-effect/`, `lineage-engine/scripts/program_assets/butterfly-effect/`.
+
+---
+
+## 16. [D] Extended Open Questions
+
+### 16.1 Telegram Chat Logs vs Script-direct
+
+If the Edgar → GAS scanner pipeline is chosen for audit trail consistency, the initial batch import of 98 rows still needs a **bootstrap mechanism**: either submit all 98 events through Edgar (slow but auditable) or use a one-time Python script that commits directly (fast but bypasses Telegram Chat Logs for the initial load only, then switches to Edgar for ongoing).
+
+### 16.2 ERA attestor identity verification
+
+Should the GAS scanner verify that the signer of a `[BUTTERFLY EFFECT CERTIFICATE EVENT]` is on a known allowlist (ERA program leads)? Same defense-in-depth pattern as `dapp_permission_change_handler.gs` §5 — re-resolve signer against `Contributors Digital Signatures`, confirm the name matches an allowlist in Script Properties.
+
+### 16.3 Batch certificate issuance
+
+Does ERA issue certs individually or as a batch at end-of-program? If batch, the `operator.html` panel needs a "Select all completed profiles → Issue certificates" bulk action that signs one event per participant.
+
+### 16.4 Private key recovery
+
+If a student loses their private key (lost phone, WhatsApp DM deleted): re-onboard with new keypair, new `pk-<hash>` directory, old record stays as orphan. The `identity.json` should support a `former_pk_hashes` array for audit continuity.
+
+### 16.5 Consent / public_listable
+
+The existing credentialing spec (§9 of `CREDENTIALING_PROGRAM_PAGES.md`) requires a `public_listable` flag for minors. Default should be `false` for Butterfly Effect (youth program). ERA must capture guardian consent before the operator flips it to `true`.
+
+### 16.6 Email in ERA roster for self-serve claim
+
+Does ERA's sheet include student/teacher email addresses? The self-serve "claim credential" flow depends on email matching. If not, either add an email column to the ERA sheet or fall back to a claim-code system.
