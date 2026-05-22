@@ -113,6 +113,7 @@ ERA Cohort Roster row
 | `Roster Source URL` | sheet URL | Tells the handler which sheet to back-fill |
 | `Roster Source Row` | `14` | Tells the handler which row to update |
 | `Schema URL` | link to this SCHEMA.md | Documentation reference for LLMs / future programs |
+| `Config URL` | `https://raw.githubusercontent.com/TrueSightDAO/butterfly-effect-club/main/config.json` | Tells the central tokenomics handler where to fetch program bootstrap config (GAS proxy URL, roster sheet ID, lineage-credentials path, etc.) |
 | `Payload JSON` | `{"school": "...", "learner_type": "...", "graduation_date": "..."}` | Program-specific metadata |
 
 ## `identity.json` shape (written by GAS handler into lineage-credentials)

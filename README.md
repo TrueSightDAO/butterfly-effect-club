@@ -7,11 +7,13 @@ Operational repo for ERA Professionals' **Butterfly Effect** cohort onboarding i
 - Admin console → `https://butterfly-effect-club.truesight.me/` (GitHub Pages from this repo's `main` root)
 
 **This repo holds:**
-- `scripts/sync_cohort.py` — reads ERA's Cohort Roster sheet, mints participant keypairs, signs `[CREDENTIALING ATTESTATION EVENT]` payloads with ERA's lineage key, submits to Edgar, back-fills audit columns.
-- `index.html` — admin console (auth gate via `admins.json`, dashboard).
-- `admins.json` — administrator allowlist (manual overrides + sheet-editor sync).
-- `SCHEMA.md` — ERA sheet schema + lineage mapping.
+- `scripts/sync_cohort.py` — dev-side `--dry-run` tool that previews the event shape against ERA's Cohort Roster. Live attestations now flow through the admin panel (browser-signed) → Edgar → central tokenomics handler.
+- `index.html` — admin console. Boot fetches `./config.json`, runtime-auth-resolves admins against the Cohort Roster sheet's editor list (via GAS proxy).
+- `config.json` — program bootstrap config: roster sheet URL, GAS proxy URL, schema URL, lineage-credentials path, Edgar endpoint.
+- `SCHEMA.md` — ERA sheet schema + the `[CREDENTIALING ATTESTATION EVENT]` field reference.
 - `PROPOSAL.md` — canonical proposal-of-record.
+
+**Trust circle:** whoever is an editor on the Cohort Roster sheet. To grant or revoke admin access: share/unshare the sheet. No static admin file to maintain.
 
 **This repo does NOT hold:**
 - Per-participant credential data (lives in [`TrueSightDAO/lineage-credentials`](https://github.com/TrueSightDAO/lineage-credentials/tree/main/programs/butterfly-effect)).

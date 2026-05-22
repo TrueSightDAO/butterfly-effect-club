@@ -61,6 +61,8 @@ It is **NOT**:
 | 2.28 | **Self-describing event payload.** `[CREDENTIALING ATTESTATION EVENT]` carries three routing fields beyond the platform-standard ones: `Roster Source URL` (which spreadsheet), `Roster Source Row` (which row 1-indexed), `Schema URL` (link to this repo's SCHEMA.md for documentation/LLM consumption). The central handler reads these fields verbatim to find where to back-fill. **No central registry needed — the event is the registry.** | Gary's refinement 2026-05-22 |
 | 2.29 | **Single writer principle.** Only the tokenomics central SA writes to program roster sheets. Each new program shares its roster (editor permission) with that SA. No admin browser → sheet write path; no per-program SA write path. Tight audit boundary: every sheet mutation traces to one identity. | Gary's refinement 2026-05-22 |
 | 2.30 | **Standard audit column names — platform-wide convention.** All program rosters share the audit-column vocabulary: `public_key`, `pk_hash`, `attestation_tx_id`, `qualification_tx_id`, `profile_url`, `credential_pdf_url`, `certificate_url`, `status`, `processed_at`, `github_commit_sha`, `notes`, `public_listable_override`. Central handler looks up by **header name** (case-insensitive on row 1), not by column index — so programs can add or reorder columns freely. The `Audit Trail` tab convention is the same — sibling tab on the same spreadsheet with stable column names. | Same |
+| 2.31 | **`config.json` at the repo root is the program's bootstrap config.** Contains: program slug + display name, roster sheet URL + sheet ID, roster tab name + audit-trail tab name, GAS proxy URL, schema URL, public credential URL template, Edgar endpoint, lineage-credentials path. The admin panel fetches `./config.json` at boot to know where everything lives. The signed event carries `Config URL` so the central tokenomics handler can fetch the same config (or just resolve `Roster Source URL` directly from the event). | Gary 2026-05-22 — codifies the panel boot sequence |
+| 2.32 | **Trust source = sheet editor list.** v1 trust circle is "whoever is an editor on the roster sheet." Both the admin panel (auth gate at boot) and the central tokenomics handler (signature verification) call the GAS proxy's `?action=list_editors` endpoint to resolve the trust list. **No static `authorized_attestors[]` to maintain manually.** Add or remove an admin = add or remove a sheet editor. If the GAS proxy is down, attestations fail closed (safe default). | Gary 2026-05-22 — supersedes earlier §2.27 idea of a static manifest list |
 | 2.18 | **Service account access scope:** the `butterfly-effect-club@get-data-io.iam.gserviceaccount.com` service account gets editor on the ERA Cohort Roster sheet (granted 2026-05-22) and **read on the Main Ledger** (`1GE7PUq-...`, needed for attestor + admin pubkey lookups). It does **NOT** get access to Telegram Chat Logs — Edgar mediates all event ledger reads. Same pattern recommended for future programs: program-scoped sheet + Main Ledger read; never direct Telegram Chat Logs. | Gary's question 2026-05-22 — scaling principle codified |
 
 ## 3. Repo layout
@@ -256,52 +258,39 @@ The qualification-as-admission is a documented deviation: platform §4b says qua
 
 ## 8. Admin console (`index.html`)
 
-Static HTML at the Pages root. No backend.
+Static HTML at the Pages root. No backend. Driven by `config.json` (§2.31) — to onboard a new program, fork this repo and edit `config.json`.
 
-**Auth flow (runtime resolution — §2.19):**
+**Boot sequence (config-driven):**
 
-1. User visits `butterfly-effect-club.truesight.me`.
+1. Panel fetches `./config.json` from same origin → reads `roster.sheet_url`, `roster.gas_proxy_url`, etc.
 2. Panel checks `localStorage` for an existing keypair (same convention as `dapp/create_signature.html`).
-3. If no key → panel renders an embedded copy of the dapp `create_signature.html` widget. User generates an RSA keypair (private stays in localStorage; public emitted via `[REGISTER KEY EVENT]` to Edgar, which writes to Main Ledger → Contributors Digital Signatures).
-4. Panel queries the GAS proxy: `?action=resolve_admin&pubkey=<base64>` → returns `{ is_admin: bool, display_name, email }`. The proxy does the two-step lookup server-side:
-   - Lookup pubkey on Main Ledger → Contributors Digital Signatures → get email/name.
-   - Cross-check email against Cohort Roster sheet editor list.
-   - Returns admin status.
-5. **Path A — admin:** render admin dashboard.
-6. **Path B — not admin, but is on `admins.json.manual_overrides[]` (matching by pubkey or registered email):** render admin dashboard. (Covers Gary as DAO-side operator who may not be a Cohort Roster editor.)
-7. **Path C — neither:** render public-mode program info.
+3. If no key → panel embeds the `create_signature.html` flow. User generates RSA keypair (private stays in localStorage; public emitted via `[REGISTER KEY EVENT]` → Main Ledger Contributors Digital Signatures).
+4. Panel calls `<roster.gas_proxy_url>?action=resolve_admin&pubkey=<base64>`. The GAS proxy:
+   - Looks up pubkey on Main Ledger → Contributors Digital Signatures → resolves to email + display name.
+   - Cross-checks the resolved email against the roster sheet's own editor list (Drive permissions).
+   - Returns `{ is_admin: bool, display_name, email }`.
+5. **Admin mode:** render attestation queue. **Public mode:** render program info + "Request access" hint.
 
 **Admin-mode surfaces (v1):**
-- **Dashboard** — counts (97 total / N profile_created / N pending / N failed), links to each profile URL, last-sync timestamp.
-- **Roster table** — read-only fetch via the GAS proxy.
-- **"Trigger sync" button** — opens GitHub Actions `workflow_dispatch` URL for `sync_cohort.yml`. One indirection, no new backend.
-- **Logged-in indicator** — display name from the resolver lookup, with "Sign out" → clears localStorage.
+- **Attestation queue** — table of unprocessed roster rows (status != processed). Each row has an "Attest" button.
+- **Click "Attest"** → browser builds `[CREDENTIALING ATTESTATION EVENT]` with self-describing routing fields (§2.28: `Roster Source URL`, `Roster Source Row`, `Schema URL`, `Config URL`). Signs with localStorage RSA key. POSTs to Edgar. Tokenomics central handler processes the rest (commit to lineage-credentials + back-fill sheet).
+- **Live status indicator** — once Edgar 200s, row shows "submitted, processing…" and polls the roster sheet (via GAS proxy) for the back-fill to land. Typically <60 seconds.
+- **Logged-in indicator** — display name from the resolver lookup, "Sign out" clears localStorage.
+- **Share link** — copy-button for `butterfly-effect-club.truesight.me`, ready to drop into WhatsApp so the next admin can pick up the queue.
 
 **Deferred to v1.1:**
-- "Issue certificate" UI (admin signs completion attestation in-browser; only relevant when a live-cohort row reaches completion).
+- "Issue certificate" UI as a distinct action from initial attestation (only relevant when a live-cohort row reaches completion — alumni rows do both in one event).
 - Manual claim-binding UI (only if a student / teacher self-generates a key in a future use case).
 
-## 9. `admins.json` (minimal — bootstrap seed only)
+## 9. `admins.json` — REMOVED
 
-Per §2.19, admin recognition is **runtime-resolved** via Main Ledger Contributors Digital Signatures + Cohort Roster editor list. `admins.json` exists only to grant access to DAO-side operators (like Gary) who are *not* Cohort Roster editors.
+Per §2.32 the **sheet editor list is the trust circle**. There is no static admin file. To add or remove an administrator:
 
-```json
-{
-  "schema_version": 2,
-  "program_slug": "butterfly-effect",
-  "auth_model": "runtime — pubkey resolved against Main Ledger Contributors Digital Signatures, cross-checked against Cohort Roster sheet editors. manual_overrides[] is the only hand-maintained list and covers DAO-side operators not on the sheet's editor list.",
-  "manual_overrides": [
-    {
-      "display_name": "Gary Teh",
-      "google_email": "garyjob@agroverse.shop",
-      "role": "operator",
-      "notes": "DAO-side operator. Pubkey resolved at runtime via Main Ledger Contributors Digital Signatures."
-    }
-  ]
-}
-```
+1. Open the [Cohort Roster sheet](https://docs.google.com/spreadsheets/d/1pApVCRqsDw9AjPUTc3fMUfMh-8H4Ne1HYuQ_d6xItog/edit).
+2. Click "Share" → add/remove the person's Google email with Editor permission.
+3. Done. Next time they visit `butterfly-effect-club.truesight.me`, the GAS proxy's `resolve_admin` check picks up the change.
 
-Bilal and Sheeran do not need entries here — they're Cohort Roster editors so the runtime check resolves them automatically.
+The DAO-side operator concern (someone who's a governor but not a sheet editor) resolves naturally: that person gets added as a sheet editor too. Gary is already an editor.
 
 ## 10. Decisions made (2026-05-22 conversation)
 

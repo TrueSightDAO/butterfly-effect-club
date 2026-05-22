@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "program_slug": "butterfly-effect",
+  "program_display_name": "Butterfly Effect",
+  "partner_organization": "ERA Professionals",
+  "admin_console_url": "https://butterfly-effect-club.truesight.me/",
+  "roster": {
+    "sheet_url": "https://docs.google.com/spreadsheets/d/1pApVCRqsDw9AjPUTc3fMUfMh-8H4Ne1HYuQ_d6xItog/edit",
+    "sheet_id": "1pApVCRqsDw9AjPUTc3fMUfMh-8H4Ne1HYuQ_d6xItog",
+    "roster_tab": "Cohort Roster",
+    "audit_trail_tab": "Audit Trail",
+    "gas_proxy_url": null,
+    "_gas_proxy_url_note": "TBD — populated once the read-only GAS proxy is deployed (container-bound to the roster sheet). Endpoints: ?action=list_editors, ?action=list_pending, ?action=resolve_admin&pubkey=..."
+  },
+  "schema_url": "https://github.com/TrueSightDAO/butterfly-effect-club/blob/main/SCHEMA.md",
+  "config_url": "https://raw.githubusercontent.com/TrueSightDAO/butterfly-effect-club/main/config.json",
+  "trust_source": "sheet_editors",
+  "_trust_source_note": "v1 trust circle = whoever is an editor on the roster sheet. Both the admin panel (auth gate) and the central tokenomics handler (signature verification) resolve attestor authority via the GAS proxy's list_editors endpoint. No static authorized_attestors[] list to maintain.",
+  "lineage_credentials": {
+    "repo": "TrueSightDAO/lineage-credentials",
+    "program_path": "programs/butterfly-effect"
+  },
+  "public_credential_url_template": "https://truesight.me/programs/butterfly-effect/credentials/#{pk_hash}",
+  "edgar_submit_endpoint": "https://edgar.truesight.me/dao/submit_contribution"
+}
