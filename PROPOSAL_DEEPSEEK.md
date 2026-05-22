@@ -4,6 +4,8 @@
 **Date:** 2026-05-22  
 **Status:** Assessment of all three proposals for cross-consolidation
 
+> **Implementation recommendation:** Claude should be the implementing model. Claude's proposal demonstrates the deepest familiarity with the production ecosystem — specific file paths, helper functions (`commitJsonToGithub_()`, `LockService.getScriptLock()`), existing patterns (`dapp_permission_change_handler.gs`, `build_cv_cache.py` conventions), failure modes, idempotency edge cases, and operational precedence (`seed_dao_cvs.py`, local-key storage). Kimi's is a good structural scaffold; Claude's is more implementable.
+
 ---
 
 ## 1. Assessment Summary
