@@ -90,20 +90,14 @@
 
   <section id="keygenCard" style="display:none;">
     <h2>Sign in</h2>
-    <p>Enter your email — same one you use on the Cohort Roster sheet. We'll create your cryptographic identity in this browser and send you a verification link.</p>
+    <p>Enter your email — same one you use on the Cohort Roster sheet. We'll send you a verification link.</p>
     <div id="signinForm">
       <input type="email" id="emailInput" placeholder="you@example.com"
              style="padding:.55rem;font-size:1rem;width:280px;border:1px solid var(--border);border-radius:4px;" />
       <button id="signinBtn" style="margin-left:.5rem;padding:.55rem 1.1rem;font-size:1rem;">Continue →</button>
     </div>
     <p id="signinStatus" class="small" style="margin-top:.75rem;"></p>
-    <p class="small" style="margin-top:1rem;">Advanced: <a href="#" id="advancedToggle">show technical details</a> · uses the same cryptographic identity as <a href="https://dapp.truesight.me/create_signature.html" target="_blank">dapp.truesight.me/create_signature.html</a> (RSA-2048 keypair in your browser's localStorage).</p>
-    <div id="advancedReveal" style="display:none;margin-top:.75rem;">
-      <div class="label">Public key</div>
-      <div class="key-block" id="genPubView"></div>
-      <div class="label">Private key — keep secret</div>
-      <div class="key-block" id="genPrivView"></div>
-    </div>
+    <p class="small" style="margin-top:1rem;">Same sign-in as <a href="https://dapp.truesight.me" target="_blank">dapp.truesight.me</a> — local to this browser.</p>
   </section>
 
   <section id="queueCard" style="display:none;">
@@ -478,15 +472,13 @@ document.getElementById('signinBtn').onclick = async function () {
   }
   this.disabled = true;
   emailInput.disabled = true;
-  this.textContent = 'Working…';
-  status.textContent = 'Generating your cryptographic identity…';
+  this.textContent = 'Signing in…';
+  status.textContent = 'Just a moment — setting things up in your browser…';
   status.className = 'small';
   try {
     const kp = await generateKeyPair();
     localStorage.setItem(LS_PUB, kp.publicKeyB64);
     localStorage.setItem(LS_PRIV, kp.privateKeyB64);
-    document.getElementById('genPubView').textContent = kp.publicKeyB64;
-    document.getElementById('genPrivView').textContent = kp.privateKeyB64;
 
     status.textContent = 'Sending verification email to ' + email + '…';
     await edgarSubmit('EMAIL REGISTERED EVENT', {
@@ -509,14 +501,6 @@ document.getElementById('signinBtn').onclick = async function () {
     this.textContent = 'Retry →';
     emailInput.disabled = false;
   }
-};
-
-document.getElementById('advancedToggle').onclick = function (ev) {
-  ev.preventDefault();
-  const rev = document.getElementById('advancedReveal');
-  const showing = rev.style.display !== 'none';
-  rev.style.display = showing ? 'none' : 'block';
-  this.textContent = showing ? 'show technical details' : 'hide technical details';
 };
 
 // Enter key submits
