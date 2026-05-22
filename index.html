@@ -267,9 +267,53 @@ async function callCentralGAS(action, params) {
 // PANEL BOOT
 // ============================================================================
 
+async function tryConsumeVerificationLink() {
+  // Edgar's verification email points back at our page with ?em=<email>&vk=<key>.
+  // If we have a localStorage keypair, fire [EMAIL VERIFICATION EVENT] for each
+  // (em, vk) pair present (the URL may carry several if the user signed in
+  // multiple times). Returns true if at least one verification submission ran.
+  const url = new URL(window.location.href);
+  const params = url.searchParams;
+  const emails = params.getAll('em');
+  const vks = params.getAll('vk');
+  if (!emails.length || !vks.length) return false;
+  const pub = localStorage.getItem(LS_PUB);
+  const priv = localStorage.getItem(LS_PRIV);
+  if (!pub || !priv) return false;
+  const pairs = [];
+  for (let i = 0; i < Math.min(emails.length, vks.length); i++) {
+    pairs.push({ em: emails[i], vk: vks[i] });
+  }
+  // Try most-recent first.
+  pairs.reverse();
+  let anySuccess = false;
+  for (const p of pairs) {
+    try {
+      await edgarSubmit('EMAIL VERIFICATION EVENT', {
+        'Verification Key': p.vk,
+        'Email': p.em,
+      }, pub, priv);
+      anySuccess = true;
+      localStorage.setItem(LS_EMAIL, p.em);
+      break;
+    } catch (err) {
+      // Try the next pair.
+      console.warn('Verification attempt failed for', p.em, p.vk.substring(0, 8), '—', err.message);
+    }
+  }
+  // Strip em+vk from URL regardless so reloads don't re-fire.
+  url.searchParams.delete('em');
+  url.searchParams.delete('vk');
+  window.history.replaceState({}, '', url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : ''));
+  return anySuccess;
+}
+
 async function boot() {
   panelConfig = await loadPanelConfig();
   applyBranding();
+  // Handle Edgar's email-verification redirect BEFORE manifest fetch so it runs
+  // even if the manifest is slow.
+  const verifiedJustNow = await tryConsumeVerificationLink();
   try {
     const resp = await fetch(MANIFEST_URL);
     if (!resp.ok) throw new Error('Manifest fetch ' + resp.status);
@@ -278,6 +322,12 @@ async function boot() {
     document.getElementById('bootBanner').className = 'banner error';
     document.getElementById('bootBanner').textContent = 'Failed to load manifest: ' + err.message;
     return;
+  }
+  if (verifiedJustNow) {
+    const banner = document.getElementById('bootBanner');
+    banner.className = 'banner success';
+    banner.textContent = 'Email verified. Welcome.';
+    banner.style.display = 'block';
   }
 
   const hasEndpoint = !!manifest.tokenomics_admin_endpoint;
