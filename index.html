@@ -54,6 +54,18 @@
   </section>
 
   <section>
+    <h2>How admin access works (planned)</h2>
+    <p>The admin console will host an embedded copy of the dapp <a href="https://dapp.truesight.me/create_signature.html"><code>create_signature.html</code></a> flow. The flow doubles as both key registration and admin authentication:</p>
+    <ol>
+      <li>Visit this page → if no key in <code>localStorage</code>, generate one</li>
+      <li>Public key is broadcast to Edgar via <code>[REGISTER KEY EVENT]</code> → lands on Main Ledger → Contributors Digital Signatures</li>
+      <li>Page queries: is your registered email also an editor on the <a href="https://docs.google.com/spreadsheets/d/1pApVCRqsDw9AjPUTc3fMUfMh-8H4Ne1HYuQ_d6xItog/edit">Cohort Roster sheet</a>?</li>
+      <li>If yes → admin dashboard. If no → public mode.</li>
+    </ol>
+    <p>So administrative recognition follows from being a Cohort Roster sheet editor — no separate allowlist to maintain.</p>
+  </section>
+
+  <section>
     <h2>Where to look</h2>
     <ul>
       <li><a href="https://github.com/TrueSightDAO/butterfly-effect-club">Repo: <code>TrueSightDAO/butterfly-effect-club</code></a> — proposal, schema, scripts</li>

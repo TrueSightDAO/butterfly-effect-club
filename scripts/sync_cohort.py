@@ -26,6 +26,7 @@ from pathlib import Path
 import gspread
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from dateutil import parser as dateutil_parser
 from google.oauth2.service_account import Credentials
 
 ERA_SHEET_ID_DEFAULT = "1pApVCRqsDw9AjPUTc3fMUfMh-8H4Ne1HYuQ_d6xItog"
@@ -102,12 +103,15 @@ def plan_row(row_index: int, row: dict) -> dict:
         return {"row": row_index, "action": "skip", "reason": "empty Name column"}
 
     is_alumni = None
-    try:
-        grad = datetime.fromisoformat(graduation_date).date()
-        today = datetime.now(timezone.utc).date()
-        is_alumni = grad <= today
-    except (ValueError, TypeError):
-        pass  # unparseable; flag for review
+    graduation_iso = None
+    if graduation_date:
+        try:
+            grad = dateutil_parser.parse(graduation_date, dayfirst=True).date()
+            graduation_iso = grad.isoformat()
+            today = datetime.now(timezone.utc).date()
+            is_alumni = grad <= today
+        except (ValueError, TypeError, dateutil_parser.ParserError):
+            pass  # unparseable; flag for review
 
     public_key_b64, _priv_pem = mint_keypair()
     pk_hash = derive_pk_hash(public_key_b64)
@@ -120,7 +124,8 @@ def plan_row(row_index: int, row: dict) -> dict:
         "name": name,
         "school": school,
         "learner_type": learner_type,
-        "graduation_date": graduation_date,
+        "graduation_date_raw": graduation_date,
+        "graduation_date_iso": graduation_iso,
         "is_alumni": is_alumni,
         "event_path": (
             "single-attestation"

@@ -49,6 +49,11 @@ It is **NOT**:
 | 2.15 | **Self-serve `create_signature.html` adaptation is deferred to v1.1.** Requires the email column on the roster, which may not exist. | DeepSeek §13 |
 | 2.16 | ERA roster cohort tab is named **`Cohort Roster`** — year-agnostic; one tab holds alumni + current cohort with `graduation_date` discriminating. | Gary's decision 2026-05-22 |
 | 2.17 | `admins.json` is split into `manual_overrides[]` (hand-curated, includes Gary and DAO-side operators) and `synced_from_sheet_editors[]` (auto-regenerated daily by a separate `admins_sync.yml` workflow that calls the GAS proxy to fetch sheet editor list and resolves each editor's pubkey on Main Ledger Contributors Digital Signatures). Auth checks the union. | Gary's suggestion 2026-05-22 |
+| 2.19 | **Admin auth = runtime resolution.** The panel hosts the existing dapp `create_signature.html` flow at `butterfly-effect-club.truesight.me`. When anyone (Gary / Bilal / Sheeran / future admin) goes through the flow: (1) panel mints or loads pubkey in localStorage, (2) fires `[REGISTER KEY EVENT]` to Edgar — which writes to Main Ledger Contributors Digital Signatures, (3) panel then queries: "is my pubkey on Contributors Digital Signatures? What email maps to it? Is that email also an editor of the Cohort Roster sheet?" If yes to both → admin mode. `admins.json` is downgraded to a minimal bootstrap seed for DAO-side operators (Gary) who may not be Cohort Roster editors. No manual `admins.json` maintenance needed for ERA-side admins. | Gary's clarification 2026-05-22 |
+| 2.20 | **No participant emails captured at bootstrap.** Per Bilal: students/parents primarily use WhatsApp; no email column added until a concrete use case requires participants to interact with the admin panel. Defers self-serve claim flow (platform §13) until that need is real. | Bilal's response 2026-05-22 |
+| 2.21 | **Credential page is text-only — no photos.** Per Bilal: the credential page shows participant text (name, school, learner type, graduation date). The certificate PDF gets printed, manually signed by ERA, and the QR on it points at the text profile page. Scanning the QR brings the parent/student to the profile. Photo-consent question moot. | Bilal's response 2026-05-22 |
+| 2.22 | **Cohort Roster has 97 data rows** (not 98 as initially reported). All graduate dates are in the past → all rows take the alumni `single-attestation` path. 84 students, 13 teachers. 3 schools: Narowal Public School (46), IMSG Islamabad (32), CMS Karachi (19). | Dry-run output 2026-05-22 |
+| 2.23 | **Sheet date format is "DD MMM YYYY" (e.g. "30 Aug 2024"), not ISO 8601.** Parser uses `python-dateutil` with `dayfirst=True`. Don't ask Bilal to reformat — accommodate the existing column. | Dry-run output 2026-05-22 |
 | 2.18 | **Service account access scope:** the `butterfly-effect-club@get-data-io.iam.gserviceaccount.com` service account gets editor on the ERA Cohort Roster sheet (granted 2026-05-22) and **read on the Main Ledger** (`1GE7PUq-...`, needed for attestor + admin pubkey lookups). It does **NOT** get access to Telegram Chat Logs — Edgar mediates all event ledger reads. Same pattern recommended for future programs: program-scoped sheet + Main Ledger read; never direct Telegram Chat Logs. | Gary's question 2026-05-22 — scaling principle codified |
 
 ## 3. Repo layout
@@ -246,50 +251,50 @@ The qualification-as-admission is a documented deviation: platform §4b says qua
 
 Static HTML at the Pages root. No backend.
 
-**Auth gate (boot sequence):**
-1. Check `localStorage` for an existing keypair (same convention as `dapp/create_signature.html`).
-2. If none, prompt: "Generate keypair" or "Paste existing public key."
-3. Compare pubkey against `admins.json[].public_key`. If match → admin mode. If not → public mode (program info + "Request access" hint).
-4. Display a "✓ Also a sheet editor" badge if the admin's Google email is among the sheet editors. **Informational only**, not a permission check.
+**Auth flow (runtime resolution — §2.19):**
+
+1. User visits `butterfly-effect-club.truesight.me`.
+2. Panel checks `localStorage` for an existing keypair (same convention as `dapp/create_signature.html`).
+3. If no key → panel renders an embedded copy of the dapp `create_signature.html` widget. User generates an RSA keypair (private stays in localStorage; public emitted via `[REGISTER KEY EVENT]` to Edgar, which writes to Main Ledger → Contributors Digital Signatures).
+4. Panel queries the GAS proxy: `?action=resolve_admin&pubkey=<base64>` → returns `{ is_admin: bool, display_name, email }`. The proxy does the two-step lookup server-side:
+   - Lookup pubkey on Main Ledger → Contributors Digital Signatures → get email/name.
+   - Cross-check email against Cohort Roster sheet editor list.
+   - Returns admin status.
+5. **Path A — admin:** render admin dashboard.
+6. **Path B — not admin, but is on `admins.json.manual_overrides[]` (matching by pubkey or registered email):** render admin dashboard. (Covers Gary as DAO-side operator who may not be a Cohort Roster editor.)
+7. **Path C — neither:** render public-mode program info.
 
 **Admin-mode surfaces (v1):**
-- **Dashboard** — counts (98 total / N profile_created / N pending / N failed), links to each profile URL, last-sync timestamp.
-- **Roster table** — read-only fetch of the ERA sheet via the embedded service-account credentials (via a public Google Sheets CSV export URL with restricted scope, OR a thin GAS proxy on the ERA sheet — TBD per §10.4).
+- **Dashboard** — counts (97 total / N profile_created / N pending / N failed), links to each profile URL, last-sync timestamp.
+- **Roster table** — read-only fetch via the GAS proxy.
 - **"Trigger sync" button** — opens GitHub Actions `workflow_dispatch` URL for `sync_cohort.yml`. One indirection, no new backend.
-- **Logged-in indicator** — admin's display name from `admins.json`, with "Sign out" → clears localStorage.
+- **Logged-in indicator** — display name from the resolver lookup, with "Sign out" → clears localStorage.
 
 **Deferred to v1.1:**
-- Per-row claim-binding UI (when student self-generates a key, admin binds to row).
-- "Issue certificate" UI for the live-cohort path (admin signs completion attestation in-browser).
+- "Issue certificate" UI (admin signs completion attestation in-browser; only relevant when a live-cohort row reaches completion).
+- Manual claim-binding UI (only if a student / teacher self-generates a key in a future use case).
 
-## 9. `admins.json`
+## 9. `admins.json` (minimal — bootstrap seed only)
+
+Per §2.19, admin recognition is **runtime-resolved** via Main Ledger Contributors Digital Signatures + Cohort Roster editor list. `admins.json` exists only to grant access to DAO-side operators (like Gary) who are *not* Cohort Roster editors.
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "program_slug": "butterfly-effect",
-  "administrators": [
+  "auth_model": "runtime — pubkey resolved against Main Ledger Contributors Digital Signatures, cross-checked against Cohort Roster sheet editors. manual_overrides[] is the only hand-maintained list and covers DAO-side operators not on the sheet's editor list.",
+  "manual_overrides": [
     {
       "display_name": "Gary Teh",
       "google_email": "garyjob@agroverse.shop",
-      "public_key": "<RSA-2048 SPKI base64>",
       "role": "operator",
-      "added_at": "2026-05-22",
-      "added_by": "self"
-    },
-    {
-      "display_name": "Bilal (ERA program lead)",
-      "google_email": "<TBD>",
-      "public_key": "<TBD — Bilal mints via admin panel on first login>",
-      "role": "program_admin",
-      "added_at": "2026-05-22",
-      "added_by": "Gary Teh"
+      "notes": "DAO-side operator. Pubkey resolved at runtime via Main Ledger Contributors Digital Signatures."
     }
   ]
 }
 ```
 
-`role` is reserved for v1.1 role-based UI gating. v1 treats every listed administrator as fully privileged.
+Bilal and Sheeran do not need entries here — they're Cohort Roster editors so the runtime check resolves them automatically.
 
 ## 10. Decisions made (2026-05-22 conversation)
 
@@ -308,15 +313,18 @@ All §10 items resolved. Summary table for the record:
 | 10.9 | Photo consent | Assumed established — Bilal already shared participant cert-holding photos. To confirm in writing with Bilal. |
 | 10.10 | `public_listable` default | `true` for all rows. ERA's curated sheet IS the consent capture. Per-record `public_listable_override: false` column available for participants Bilal wants kept off the directory. |
 
-## 10b. Decisions remaining (operational, surface as Bilal emails)
+## 10b. Bilal's responses (2026-05-22)
 
-These don't block scaffolding but should be in the operator handoff:
+1. **Signing key path → admin auth flow.** Bilal proposed (and Gary adopted) the unified approach codified in §2.19 — the create_signature.html flow on `butterfly-effect-club.truesight.me` doubles as both key registration AND admin authentication. No separate "confirm existing key" step needed; whoever goes through the flow first becomes a recognized admin if their email is on the Cohort Roster editor list.
+2. **Email column → deferred.** Students/parents use WhatsApp, not email. Defer until a concrete admin-panel use case for participants exists.
+3. **Photo consent → moot.** No photos on credential pages. Text-only profile + printed-and-signed certificate with QR pointing at the profile. See §2.21.
+4. **Minors / `public_listable` → all public.** §2.11 default stands.
+5. **First sweep → dry-run only for now.** No `--execute` runs until docs/UX are reviewed.
 
-1. **Confirm Bilal's existing pubkey on Main Ledger.** Or confirm he'll mint a fresh one via the admin panel. Either way works.
-2. **Add `email` column to ERA roster** for v1.1 self-serve.
-3. **Confirm photo-consent capture** in writing for the audit trail.
-4. **Identify minors in the cohort** — Bilal flags any participants he wants kept off the searchable directory via the per-record override column.
-5. **Pick the first 10 rows** for the initial sweep.
+## 10c. Outstanding ERA actions (none block continuing)
+
+- **Sheeran** (ERA operator who triggers cert issuance by updating the Cohort Roster) needs to be added as a Cohort Roster editor (so the runtime auth resolves her as an admin) if she's not already.
+- Sheet stays as-is; date format "DD MMM YYYY" is accommodated by the parser.
 
 ## 11. Phased implementation
 
