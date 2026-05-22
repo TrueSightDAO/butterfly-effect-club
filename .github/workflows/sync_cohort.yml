@@ -1,0 +1,82 @@
+name: Sync ERA Cohort
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode: dry-run or execute (execute NYI in v1 skeleton)"
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - execute
+      row:
+        description: "Single row to process (1-indexed, optional)"
+        required: false
+        type: string
+  schedule:
+    - cron: "0 3 * * *"  # daily at 03:00 UTC — dry-run only until --execute lands
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-era-cohort
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Decode service account credentials
+        env:
+          GOOGLE_CREDENTIALS_JSON_B64: ${{ secrets.GOOGLE_CREDENTIALS_JSON_B64 }}
+        run: |
+          if [ -z "$GOOGLE_CREDENTIALS_JSON_B64" ]; then
+            echo "ERROR: GOOGLE_CREDENTIALS_JSON_B64 secret not set on the repo." >&2
+            echo "Add it under Settings → Secrets → Actions. Value is the base64-encoded" >&2
+            echo "service-account JSON for butterfly-effect-club@get-data-io.iam.gserviceaccount.com" >&2
+            exit 1
+          fi
+          echo "$GOOGLE_CREDENTIALS_JSON_B64" | base64 -d > /tmp/creds.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/creds.json" >> $GITHUB_ENV
+
+      - name: Run sync (dry-run on schedule, mode-driven on dispatch)
+        env:
+          ERA_SHEET_ID: ${{ vars.ERA_SHEET_ID }}
+          ERA_SHEET_TAB: ${{ vars.ERA_SHEET_TAB }}
+          EDGAR_ENDPOINT: ${{ vars.EDGAR_ENDPOINT }}
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "Scheduled run — dry-run mode"
+            python3 scripts/sync_cohort.py --dry-run
+          elif [ "${{ inputs.mode }}" = "execute" ]; then
+            if [ -n "${{ inputs.row }}" ]; then
+              python3 scripts/sync_cohort.py --execute --row "${{ inputs.row }}"
+            else
+              python3 scripts/sync_cohort.py --execute
+            fi
+          else
+            if [ -n "${{ inputs.row }}" ]; then
+              python3 scripts/sync_cohort.py --dry-run --row "${{ inputs.row }}"
+            else
+              python3 scripts/sync_cohort.py --dry-run
+            fi
+          fi
+
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f /tmp/creds.json

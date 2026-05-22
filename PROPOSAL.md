@@ -41,12 +41,15 @@ It is **NOT**:
 | 2.7 | **Participant private keys are ephemeral.** Mint, derive `pk-<hash>`, export public to identity.json + sheet, **discard private.** No `keys/` directory. The participant pk is only a folder identifier; ERA's lineage key carries trust. | Resolves Kimi's override-1 critique of my original `keys/` proposal — Kimi's `.gitignore`-as-custody concern is right, but the answer is "don't retain keys" not "send via WhatsApp" |
 | 2.8 | **WhatsApp DM private-key transit is rejected.** WhatsApp Cloud-backs DMs to Drive/iCloud — same threat the platform was designed to avoid. Participant key adoption happens via the deferred self-serve claim flow (platform §13). | Overrides Kimi §4.2 |
 | 2.9 | `pk-hash` derivation is **canonical**: `pk-` + first 12 chars of `base64url(SHA-256(base64-decoded public-key bytes))`. Matches `tokenomics/google_app_scripts/tdg_credentialing/practice_event_processing.gs::deriveSlug()`. | Codified for cross-language parity (Python script + JS panel + GAS handler all derive the same string) |
-| 2.10 | ERA lineage signing key lives **on Gary's machine** for v1 bootstrap. GitHub Actions secret deferred to v1.1 once ERA wants to issue ongoing certs without Gary in the loop. | Matches `seed_dao_cvs.py` precedent per `CREDENTIALING_PLATFORM.md §9b` |
-| 2.11 | `public_listable: false` default for minors. ERA must capture guardian consent before flipping to `true`. | DeepSeek §16.5 + `CREDENTIALING_PROGRAM_PAGES.md §9` |
+| 2.10 | ERA lineage signing key — **Bilal's existing registered key** (row 63 of [Contributors contact information](https://docs.google.com/spreadsheets/d/1GE7PUq-UT6x2rBN-Q2ksogbWpgyuh2SaxJyG_uEK6PU/edit?gid=1460794618#gid=1460794618), public half on the [Contributors Digital Signatures](https://docs.google.com/spreadsheets/d/1GE7PUq-UT6x2rBN-Q2ksogbWpgyuh2SaxJyG_uEK6PU/edit?gid=577022511#gid=577022511) tab) **OR** a fresh key Bilal mints via the admin panel's signing module. Either is acceptable. Script looks up the attestor pubkey by name at runtime. | Gary's decision 2026-05-22 — uses existing DAO contributor signature when present, no need to mint program-scoped key |
+| 2.11 | `public_listable: true` default for all rows in the ERA sheet — the row's presence on a curated, institutionally-managed roster IS the consent. Per-record override available via an explicit `public_listable_override` column for participants Bilal wants to keep off the searchable directory (e.g., specific minors). | Gary's decision 2026-05-22 — institutional cohort import is the consent-capture moment; platform §9 default was written for self-create flows that don't apply here |
 | 2.12 | `identity.json` includes `former_pk_hashes: []` array for re-onboarding after key loss. | DeepSeek §16.4 |
 | 2.13 | Script default is `--dry-run`. `--execute` is opt-in to apply. Matches `onboard_retail_partner.py` precedent. | All three drafts agreed, but only my draft made dry-run the default |
 | 2.14 | **GAS scanner for continuous additions is deferred to v1.1.** v1 ships the Python bootstrap only. | DeepSeek §16.1 — bootstrap-vs-ongoing split |
 | 2.15 | **Self-serve `create_signature.html` adaptation is deferred to v1.1.** Requires the email column on the roster, which may not exist. | DeepSeek §13 |
+| 2.16 | ERA roster cohort tab is named **`Cohort Roster`** — year-agnostic; one tab holds alumni + current cohort with `graduation_date` discriminating. | Gary's decision 2026-05-22 |
+| 2.17 | `admins.json` is split into `manual_overrides[]` (hand-curated, includes Gary and DAO-side operators) and `synced_from_sheet_editors[]` (auto-regenerated daily by a separate `admins_sync.yml` workflow that calls the GAS proxy to fetch sheet editor list and resolves each editor's pubkey on Main Ledger Contributors Digital Signatures). Auth checks the union. | Gary's suggestion 2026-05-22 |
+| 2.18 | **Service account access scope:** the `butterfly-effect-club@get-data-io.iam.gserviceaccount.com` service account gets editor on the ERA Cohort Roster sheet (granted 2026-05-22) and **read on the Main Ledger** (`1GE7PUq-...`, needed for attestor + admin pubkey lookups). It does **NOT** get access to Telegram Chat Logs — Edgar mediates all event ledger reads. Same pattern recommended for future programs: program-scoped sheet + Main Ledger read; never direct Telegram Chat Logs. | Gary's question 2026-05-22 — scaling principle codified |
 
 ## 3. Repo layout
 
@@ -288,24 +291,32 @@ Static HTML at the Pages root. No backend.
 
 `role` is reserved for v1.1 role-based UI gating. v1 treats every listed administrator as fully privileged.
 
-## 10. Decisions still needed
+## 10. Decisions made (2026-05-22 conversation)
 
-These are the only items blocking scaffolding. Each is a single binary or low-cardinality choice.
+All §10 items resolved. Summary table for the record:
 
-| # | Decision | Options | My lean |
-|---|---|---|---|
-| 10.1 | **ERA lineage key** — does ERA already have a registered DAO lineage key, or do we mint + register one as part of bootstrap? | (a) Bilal already has a registered key → use it (b) Mint + register a fresh "ERA Professionals — Butterfly Effect" lineage key during bootstrap | (b) Mint fresh — cleaner attribution + matches the principle that the *program* signs, not an individual |
-| 10.2 | **Live-cohort event type for admission** | (a) `[CREDENTIALING QUALIFICATION EVENT]` with `signer_role: institutional-admission` annotation (deviates from platform §4b) (b) Use `[CREDENTIALING ATTESTATION EVENT]` with `Attestation Type: program-admission` (stays inside platform) | (b) — fewer platform deviations; the event-type vocabulary stays clean |
-| 10.3 | **How the admin panel reads the ERA sheet** | (a) Public CSV export URL (sheet must be world-readable) (b) Thin GAS proxy on the ERA sheet, returns JSON over CORS (c) Service-account JWT in the browser (heavyweight, leaks credentials) | (b) — GAS proxy. Sheet stays restricted; CORS-friendly; reuse existing patterns. |
-| 10.4 | **How `sync_cohort.py` is triggered from the panel** | (a) Opens GitHub Actions `workflow_dispatch` URL (admin clicks "Run workflow" on GitHub) (b) Direct webhook to a backend (none exists; new dependency) (c) Manual — admin runs locally; panel is read-only | (a) — one indirection, zero new infrastructure. (c) is acceptable v0 if (a) is too much |
-| 10.5 | **First-cohort batch size** — full 98 in first run, or staged? | (a) Process all 98 (b) First 10 → review → remaining 88 | (b) — per `BUTTERFLY_EFFECT_COHORT_ONBOARDING_PLAN.md §5.3` recommendation, catches edge cases before they multiply |
-| 10.6 | **Repo visibility** | (a) Public (b) Private | (a) — consistent with `lineage-credentials` + `truesight_me_beta`; sensitive material (`google_credentials.json`, `era_lineage_private.pem`) gated by `.gitignore` |
-| 10.7 | **GitHub Pages source** | (a) `main` branch root (b) `main` branch `/docs` (c) `gh-pages` branch | (a) — simplest; CNAME committed at root |
-| 10.8 | **ERA sheet email column for self-serve v1.1** | (a) Ask Bilal to add an `email` column to the source roster (b) Capture emails later via the admin panel as students claim | (a) — cheaper if ERA already has the emails on file |
-| 10.9 | **Photo-consent question for ERA** (`BUTTERFLY_EFFECT_COHORT_ONBOARDING_PLAN.md §5.4`) | Open question for ERA, not us | Defer; doesn't block bootstrap |
-| 10.10 | **`public_listable` per-cohort default** | (a) `false` for everyone, flip per-record on consent (b) `true` for adult alumni, `false` for current minors | (a) — safer default; ERA can bulk-update consenting adults later |
+| # | Decision | Resolution |
+|---|---|---|
+| 10.1 | ERA lineage key origin | Bilal's existing key on Main Ledger Contributors Digital Signatures (looked up by name from row 63 of Contributors contact info); OR a fresh key Bilal mints via the admin panel's create_signature module on first login. Either is acceptable. |
+| 10.2 | Live-cohort admission event type | `[CREDENTIALING ATTESTATION EVENT]` with `Attestation Type: program-admission`. |
+| 10.3 | Admin panel reads sheet | GAS proxy. No CSV export. |
+| 10.4 | `sync_cohort.py` trigger | Daily cron via GitHub Actions + `workflow_dispatch` for manual runs + local execution by Gary as needed. |
+| 10.5 | First batch size | 10 rows first, review, then remaining 88. |
+| 10.6 | Repo visibility | Public. Credentials as base64-encoded env vars / GitHub Actions secrets. No JSON committed. |
+| 10.7 | GitHub Pages source | `main` branch root. |
+| 10.8 | Email column on ERA roster | Add it. Bilal email request. |
+| 10.9 | Photo consent | Assumed established — Bilal already shared participant cert-holding photos. To confirm in writing with Bilal. |
+| 10.10 | `public_listable` default | `true` for all rows. ERA's curated sheet IS the consent capture. Per-record `public_listable_override: false` column available for participants Bilal wants kept off the directory. |
 
-I'll wait on these before scaffolding `scripts/sync_cohort.py`.
+## 10b. Decisions remaining (operational, surface as Bilal emails)
+
+These don't block scaffolding but should be in the operator handoff:
+
+1. **Confirm Bilal's existing pubkey on Main Ledger.** Or confirm he'll mint a fresh one via the admin panel. Either way works.
+2. **Add `email` column to ERA roster** for v1.1 self-serve.
+3. **Confirm photo-consent capture** in writing for the audit trail.
+4. **Identify minors in the cohort** — Bilal flags any participants he wants kept off the searchable directory via the per-record override column.
+5. **Pick the first 10 rows** for the initial sweep.
 
 ## 11. Phased implementation
 

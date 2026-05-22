@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Butterfly Effect Club · Admin Console</title>
+  <meta name="description" content="Administrative console for the ERA Professionals Butterfly Effect credentialing cohort." />
+  <style>
+    :root {
+      --primary: #A66B2E;
+      --secondary: #F2E4CE;
+      --text: #2A1F12;
+      --muted: #7A6B58;
+      --bg: #FAF7F1;
+      --border: #E4D8C2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--bg);
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+    }
+    header { border-bottom: 2px solid var(--primary); padding-bottom: 1rem; margin-bottom: 2rem; }
+    h1 { color: var(--primary); margin: 0 0 .25rem; font-size: 1.6rem; }
+    .subtitle { color: var(--muted); font-size: .95rem; margin: 0; }
+    .pill {
+      display: inline-block; padding: .15rem .55rem; border-radius: 999px;
+      font-size: .75rem; font-weight: 600; text-transform: uppercase;
+      background: var(--secondary); color: var(--primary); margin-left: .5rem;
+    }
+    section { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 1.25rem; }
+    h2 { margin-top: 0; color: var(--primary); font-size: 1.1rem; }
+    ul { padding-left: 1.25rem; }
+    li { margin-bottom: .35rem; }
+    code { background: var(--secondary); padding: .1rem .35rem; border-radius: 4px; font-size: .9em; }
+    a { color: var(--primary); text-decoration: none; border-bottom: 1px dotted currentColor; }
+    a:hover { border-bottom-style: solid; }
+    footer { text-align: center; color: var(--muted); font-size: .85rem; margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Butterfly Effect Club <span class="pill">v1 scaffold</span></h1>
+    <p class="subtitle">Administrative console for the ERA Professionals × TrueSight DAO credentialing cohort.</p>
+  </header>
+
+  <section>
+    <h2>Status</h2>
+    <p>The admin console UI is under construction. v1 scaffolding shipped 2026-05-22 — it provides the repo layout, sheet schema, the dry-run sync script, and the GitHub Pages bind. The dashboard, auth gate, and roster table land in <strong>Phase 6</strong> of the implementation sequence (see <a href="https://github.com/TrueSightDAO/butterfly-effect-club/blob/main/PROPOSAL.md#11-phased-implementation">PROPOSAL.md §11</a>).</p>
+  </section>
+
+  <section>
+    <h2>Where to look</h2>
+    <ul>
+      <li><a href="https://github.com/TrueSightDAO/butterfly-effect-club">Repo: <code>TrueSightDAO/butterfly-effect-club</code></a> — proposal, schema, scripts</li>
+      <li><a href="https://truesight.me/programs/butterfly-effect/">Program landing page on truesight.me</a> — partner co-branded surface (this is the public credential URL family)</li>
+      <li><a href="https://github.com/TrueSightDAO/lineage-credentials/tree/main/programs/butterfly-effect">Participant records</a> — written to <code>lineage-credentials</code> by the GAS handler downstream of Edgar</li>
+      <li><a href="https://github.com/TrueSightDAO/butterfly-effect-club/blob/main/SCHEMA.md">SCHEMA.md</a> — ERA Cohort Roster schema + back-fill column glossary</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>For operators</h2>
+    <p>Local dry-run runbook in <a href="https://github.com/TrueSightDAO/butterfly-effect-club/blob/main/scripts/README.md"><code>scripts/README.md</code></a>. Service account is <code>butterfly-effect-club@get-data-io.iam.gserviceaccount.com</code>; the Cohort Roster sheet at <code>1pApVCRqsDw9...</code> already grants it editor access.</p>
+  </section>
+
+  <footer>
+    <p>TrueSight DAO &middot; <a href="https://truesight.me">truesight.me</a></p>
+  </footer>
+</body>
+</html>
