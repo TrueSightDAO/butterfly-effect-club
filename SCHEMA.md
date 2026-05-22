@@ -74,23 +74,46 @@ Mirrors the "DApp Remarks" pattern (`1eiqZr3LW-qEI6Hmy0Vrur_8flbRwxwA7jXVrbUnHbv
 
 ## Lineage / event mapping
 
+The canonical flow goes via the admin panel (browser) + the central tokenomics handler. `scripts/sync_cohort.py` is the dev-side `--dry-run` tool that previews + tests the same event shape without firing live events.
+
 ```
 ERA Cohort Roster row
-    └── scripts/sync_cohort.py
-            ├── (alumni path: graduation_date ≤ today)
-            │   └── [CREDENTIALING ATTESTATION EVENT] signed by Bilal's lineage key
-            │       → Edgar /dao/submit_contribution
-            │       → Telegram Chat Logs (universal ledger)
-            │       → GAS credentialing_processing.gs
-            │       → Commits to lineage-credentials/programs/butterfly-effect/<pk_hash>/
-            │           ├── identity.json
-            │           └── attestations/<timestamp>-program-completion.json
-            │
-            └── (live-cohort path: graduation_date > today)
-                ├── First: [CREDENTIALING ATTESTATION EVENT] type=program-admission
-                └── Later (on completion): [CREDENTIALING ATTESTATION EVENT] type=program-completion
-                    → references the admission Request Transaction ID
+    └── Admin clicks "Attest" on butterfly-effect-club.truesight.me
+            ├── Browser builds [CREDENTIALING ATTESTATION EVENT] with routing fields:
+            │       - Roster Source URL: this sheet
+            │       - Roster Source Row: <N>
+            │       - Schema URL: link to this SCHEMA.md
+            ├── Browser signs with admin's localStorage RSA key
+            ├── POST → Edgar /dao/submit_contribution
+            ├── Edgar appends row to Telegram Chat Logs (universal ledger)
+            └── tokenomics central handler picks up the event:
+                ├── Verifies signature
+                ├── Verifies Attestor Public Key ∈ program manifest authorized_attestors[]
+                ├── Commits to lineage-credentials/programs/butterfly-effect/<pk_hash>/:
+                │       - identity.json
+                │       - attestations/<timestamp>-program-completion.json
+                └── Back-fills the source sheet (using Roster Source URL + Row):
+                        - Cohort Roster row N: status, pk_hash, attestation_tx_id, profile_url, processed_at, ...
+                        - Appends to Audit Trail tab on same spreadsheet
 ```
+
+### Required routing fields on each `[CREDENTIALING ATTESTATION EVENT]`
+
+| Field | Example | Why |
+|---|---|---|
+| `Program` | `butterfly-effect` | Routes to lineage-credentials subfolder + program manifest |
+| `Attestor Public Key` | base64 SPKI | Verified against program's `authorized_attestors[]` |
+| `Attestor Name` | "Bilal Musharraf" | Audit display |
+| `Attestee Public Key` | base64 SPKI | Derives `pk-hash` folder name |
+| `Attestee Name` | "Maria Santos" | identity.json + display |
+| `Attestation Type` | `program-completion` | Distinguishes profile-creation vs cert-attestation events |
+| `Captured At` | ISO 8601 | identity.json `linked_at` |
+| `Program Year` | "2025-2026" | Cert template variable |
+| `Source URL` | this admin panel URL | Where the event originated (UI/CLI/etc.) |
+| `Roster Source URL` | sheet URL | Tells the handler which sheet to back-fill |
+| `Roster Source Row` | `14` | Tells the handler which row to update |
+| `Schema URL` | link to this SCHEMA.md | Documentation reference for LLMs / future programs |
+| `Payload JSON` | `{"school": "...", "learner_type": "...", "graduation_date": "..."}` | Program-specific metadata |
 
 ## `identity.json` shape (written by GAS handler into lineage-credentials)
 
