@@ -97,7 +97,17 @@
     <h2>Attestation queue <span id="queueCount" class="pill"></span></h2>
     <p class="small">Click <strong>Attest</strong> on a row to confirm that participant has completed the program. Their credential profile will be live within a minute. · <a id="rosterSheetLink" href="#" target="_blank">Open the source sheet ↗</a></p>
     <div id="queueBody"></div>
-    <button id="refreshQueueBtn" class="secondary" style="margin-top:.6rem;">Refresh queue</button>
+    <div style="margin-top:.6rem;display:flex;gap:.4rem;flex-wrap:wrap;">
+      <button id="refreshQueueBtn" class="secondary">Refresh queue</button>
+      <button id="processNowBtn" class="secondary" title="Manually trigger the central handler to commit any pending attestation events to lineage-credentials and back-fill the sheet">Process pending events</button>
+      <span id="processNowStatus" class="small" style="align-self:center;"></span>
+    </div>
+  </section>
+
+  <section id="attestedCard" style="display:none;">
+    <h2>Already attested <span id="attestedCount" class="pill"></span></h2>
+    <p class="small">Participants whose credentials are live. Click a row to open their public profile.</p>
+    <div id="attestedBody"></div>
   </section>
 
   <section id="publicCard" style="display:none;">
@@ -379,7 +389,9 @@ async function boot() {
   if (isAdmin) {
     setMode('admin', 'Admin');
     document.getElementById('queueCard').style.display = 'block';
+    document.getElementById('attestedCard').style.display = 'block';
     await loadQueue();
+    await loadAttested();
   } else if (resolveError && identity.registered) {
     // Endpoint exists but call failed — most likely OAuth scope not yet
     // authorized in the Apps Script project. Show the queue card with a
@@ -455,6 +467,55 @@ async function loadQueue() {
     } else {
       body.innerHTML = '<p class="small">The queue is temporarily unavailable. Please try again shortly.</p>';
     }
+  }
+}
+
+async function loadAttested() {
+  const body = document.getElementById('attestedBody');
+  body.innerHTML = '<p class="small">Loading…</p>';
+  try {
+    const data = await callCentralGAS('list_attested_rows', { sheet_url: manifest.roster_sheet_url, tab: manifest.roster_tab || 'Cohort Roster' });
+    const rows = data.rows || [];
+    document.getElementById('attestedCount').textContent = rows.length + ' done';
+    if (rows.length === 0) {
+      body.innerHTML = '<p class="small">No attestations recorded yet.</p>';
+      return;
+    }
+    let html = '<table><thead><tr><th>Name</th><th>School</th><th>Type</th><th>Graduation</th><th>Profile</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+      const url = r['profile_url'] || '';
+      const linkCell = url ? '<a href="' + escapeHtml(url) + '" target="_blank">View ↗</a>' : '';
+      html += '<tr class="processed">' +
+        '<td>' + escapeHtml(r.Name || '') + '</td>' +
+        '<td>' + escapeHtml(r.School || '') + '</td>' +
+        '<td>' + escapeHtml(r['Learner Type'] || '') + '</td>' +
+        '<td>' + escapeHtml(r['Graduation Date'] || '') + '</td>' +
+        '<td>' + linkCell + '</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table>';
+    body.innerHTML = html;
+  } catch (err) {
+    body.innerHTML = '<p class="small">Could not load attested list. Try refreshing the queue.</p>';
+  }
+}
+
+async function processPendingEvents() {
+  const btn = document.getElementById('processNowBtn');
+  const status = document.getElementById('processNowStatus');
+  btn.disabled = true;
+  status.textContent = 'Processing…';
+  try {
+    const data = await callCentralGAS('process_attestation_events', {});
+    const s = data.summary || {};
+    status.textContent =
+      'Scanned ' + (s.rows_scanned || 0) + ', processed ' + (s.processed || 0) +
+      (s.failed ? ', failed ' + s.failed : '');
+    setTimeout(function () { loadQueue(); loadAttested(); }, 1500);
+  } catch (err) {
+    status.textContent = 'Failed: ' + err.message;
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -585,7 +646,8 @@ document.getElementById('emailInput').addEventListener('keydown', function (ev) 
   if (ev.key === 'Enter') document.getElementById('signinBtn').click();
 });
 
-document.getElementById('refreshQueueBtn').onclick = loadQueue;
+document.getElementById('refreshQueueBtn').onclick = function () { loadQueue(); loadAttested(); };
+document.getElementById('processNowBtn').onclick = processPendingEvents;
 
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, function (c) {
