@@ -212,18 +212,23 @@ async function edgarCheckSignature(publicKeyB64) {
   return resp.json();
 }
 
+// Mirrors dapp/scripts/edgar_payload_helper.js buildPayloadString — payload
+// must end with "\n--------" and field values are rendered as "- Label: value"
+// with multi-line values indented.
 function buildEventPayload(eventName, attributes) {
-  let body = '[' + eventName + ']\n';
+  if (!eventName) throw new Error('eventName required');
+  const lines = [];
   Object.keys(attributes).forEach(function (k) {
-    const v = attributes[k];
-    if (v === undefined || v === null) return;
-    if (typeof v === 'object') {
-      body += '- ' + k + ':\n' + JSON.stringify(v, null, 2) + '\n';
-    } else {
-      body += '- ' + k + ': ' + v + '\n';
-    }
+    const raw = attributes[k];
+    if (raw === undefined || raw === null) return;
+    let value;
+    if (Array.isArray(raw)) value = raw.join(', ');
+    else if (typeof raw === 'object') { try { value = JSON.stringify(raw); } catch (_) { value = String(raw); } }
+    else value = String(raw);
+    if (value.indexOf('\n') !== -1) value = value.replace(/\r?\n/g, '\n  ');
+    lines.push('- ' + k + ': ' + value);
   });
-  return body.trimEnd();
+  return '[' + eventName.trim() + ']\n' + lines.join('\n') + '\n--------';
 }
 
 async function edgarSubmit(eventName, attributes, publicKeyB64, privateKeyB64) {
@@ -483,8 +488,6 @@ document.getElementById('signinBtn').onclick = async function () {
     status.textContent = 'Sending verification email to ' + email + '…';
     await edgarSubmit('EMAIL REGISTERED EVENT', {
       'Email': email,
-      'Generation source': window.location.href,
-      'Submitted At': new Date().toISOString(),
     }, kp.publicKeyB64, kp.privateKeyB64);
     localStorage.setItem(LS_EMAIL, email);
 
