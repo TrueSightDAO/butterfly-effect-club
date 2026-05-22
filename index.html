@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Butterfly Effect Club · Admin Console</title>
   <meta name="description" content="Administrative console for the ERA Professionals Butterfly Effect credentialing cohort." />
+  <link id="favicon" rel="icon" type="image/png" href="cert_template/logo.png" />
+  <link rel="apple-touch-icon" href="cert_template/logo.png" />
   <style>
     :root {
       --primary: #A66B2E;
@@ -23,7 +25,9 @@
     }
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.55; color: var(--text); background: var(--bg); max-width: 920px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
-    header { border-bottom: 2px solid var(--primary); padding-bottom: 1rem; margin-bottom: 1.5rem; }
+    header { border-bottom: 2px solid var(--primary); padding-bottom: 1rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; }
+    header .titles { flex: 1 1 auto; }
+    header img.logo { width: 64px; height: 64px; flex: 0 0 auto; object-fit: contain; border-radius: 8px; background: white; padding: 4px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
     h1 { color: var(--primary); margin: 0 0 .25rem; font-size: 1.6rem; }
     .subtitle { color: var(--muted); font-size: .95rem; margin: 0; }
     .pill { display: inline-block; padding: .15rem .55rem; border-radius: 999px; font-size: .7rem; font-weight: 600; text-transform: uppercase; background: var(--secondary); color: var(--primary-dark); margin-left: .5rem; vertical-align: middle; }
@@ -60,8 +64,11 @@
 </head>
 <body>
   <header>
-    <h1>Butterfly Effect Club <span id="modeIndicator" class="pill">booting…</span></h1>
-    <p class="subtitle">Administrative console for the ERA Professionals × TrueSight DAO credentialing cohort.</p>
+    <img id="programLogo" class="logo" src="cert_template/logo.png" alt="" />
+    <div class="titles">
+      <h1><span id="programName">Butterfly Effect Club</span> <span id="modeIndicator" class="pill">booting…</span></h1>
+      <p class="subtitle">Administrative console for the ERA Professionals × TrueSight DAO credentialing cohort.</p>
+    </div>
   </header>
 
   <div id="bootBanner" class="banner warn">Booting from <code>truesight.me/programs/butterfly-effect/manifest.json</code>…</div>
@@ -129,9 +136,40 @@ const LS_PRIV = 'be_panel_private_key';
 const LS_EMAIL = 'be_panel_email';
 
 let manifest = null;
+let panelConfig = null;  // local config.json from same origin
 let identity = null;     // { email, name } from Edgar lookup
 let isAdmin = false;
 let queueRows = [];
+
+async function loadPanelConfig() {
+  try {
+    const resp = await fetch('config.json', { cache: 'no-store' });
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch (_) {
+    return null;
+  }
+}
+
+function applyBranding() {
+  if (!panelConfig) return;
+  const cert = panelConfig.cert_template || {};
+  if (cert.base_url && cert.logo) {
+    const logoUrl = cert.base_url.replace(/\/?$/, '/') + cert.logo;
+    const fav = document.getElementById('favicon');
+    if (fav) fav.href = logoUrl;
+    const headerLogo = document.getElementById('programLogo');
+    if (headerLogo) {
+      headerLogo.src = logoUrl;
+      headerLogo.alt = (panelConfig.program_display_name || '') + ' logo';
+    }
+  }
+  if (panelConfig.program_display_name) {
+    const nameEl = document.getElementById('programName');
+    if (nameEl) nameEl.textContent = panelConfig.program_display_name + ' Club';
+    document.title = panelConfig.program_display_name + ' Club · Admin Console';
+  }
+}
 
 // ============================================================================
 // CRYPTO HELPERS (WebCrypto SubtleCrypto — mirrors dapp/create_signature.html)
@@ -239,6 +277,8 @@ async function callCentralGAS(action, params) {
 // ============================================================================
 
 async function boot() {
+  panelConfig = await loadPanelConfig();
+  applyBranding();
   try {
     const resp = await fetch(MANIFEST_URL);
     if (!resp.ok) throw new Error('Manifest fetch ' + resp.status);
