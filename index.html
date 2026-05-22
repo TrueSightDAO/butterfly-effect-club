@@ -89,21 +89,20 @@
   </section>
 
   <section id="keygenCard" style="display:none;">
-    <h2>Sign in by registering your key</h2>
-    <p>This panel uses the same cryptographic identity as <a href="https://dapp.truesight.me/create_signature.html">dapp.truesight.me/create_signature.html</a>. Generate a keypair, register it under your email, and you'll be able to attest cohort credentials if your email is a Cohort Roster editor.</p>
-    <button id="generateBtn">Generate keypair</button>
-    <div id="keygenResult" style="display:none;margin-top:1rem;">
-      <p><strong>Keypair generated.</strong> Save your private key — it's also stored in this browser's <code>localStorage</code>.</p>
-      <div class="label">Public key (will be registered with Edgar)</div>
+    <h2>Sign in</h2>
+    <p>Enter your email — same one you use on the Cohort Roster sheet. We'll create your cryptographic identity in this browser and send you a verification link.</p>
+    <div id="signinForm">
+      <input type="email" id="emailInput" placeholder="you@example.com"
+             style="padding:.55rem;font-size:1rem;width:280px;border:1px solid var(--border);border-radius:4px;" />
+      <button id="signinBtn" style="margin-left:.5rem;padding:.55rem 1.1rem;font-size:1rem;">Continue →</button>
+    </div>
+    <p id="signinStatus" class="small" style="margin-top:.75rem;"></p>
+    <p class="small" style="margin-top:1rem;">Advanced: <a href="#" id="advancedToggle">show technical details</a> · uses the same cryptographic identity as <a href="https://dapp.truesight.me/create_signature.html" target="_blank">dapp.truesight.me/create_signature.html</a> (RSA-2048 keypair in your browser's localStorage).</p>
+    <div id="advancedReveal" style="display:none;margin-top:.75rem;">
+      <div class="label">Public key</div>
       <div class="key-block" id="genPubView"></div>
-      <div class="label">Private key</div>
+      <div class="label">Private key — keep secret</div>
       <div class="key-block" id="genPrivView"></div>
-      <div style="margin-top:.75rem;">
-        <label for="emailInput">Your email (for DAO registration):</label>
-        <input type="email" id="emailInput" placeholder="you@example.com" style="padding:.4rem;font-size:.9rem;width:280px;border:1px solid var(--border);border-radius:4px;margin-left:.5rem;" />
-        <button id="registerBtn" style="margin-left:.5rem;">Register key with Edgar</button>
-      </div>
-      <p id="registerStatus" class="small" style="margin-top:.5rem;"></p>
     </div>
   </section>
 
@@ -464,45 +463,66 @@ async function attestRow(idx) {
 }
 
 // ============================================================================
-// KEY GENERATION FLOW
+// SIGN-IN FLOW — one email field, keypair gen + registration happen behind it
 // ============================================================================
 
-document.getElementById('generateBtn').onclick = async function () {
+document.getElementById('signinBtn').onclick = async function () {
+  const emailInput = document.getElementById('emailInput');
+  const email = emailInput.value.trim();
+  const status = document.getElementById('signinStatus');
+  if (!email || email.indexOf('@') === -1) {
+    status.textContent = 'Please enter a valid email.';
+    status.className = 'small';
+    emailInput.focus();
+    return;
+  }
   this.disabled = true;
-  this.textContent = 'Generating…';
-  const kp = await generateKeyPair();
-  localStorage.setItem(LS_PUB, kp.publicKeyB64);
-  localStorage.setItem(LS_PRIV, kp.privateKeyB64);
-  document.getElementById('genPubView').textContent = kp.publicKeyB64;
-  document.getElementById('genPrivView').textContent = kp.privateKeyB64;
-  document.getElementById('keygenResult').style.display = 'block';
-  this.style.display = 'none';
-};
-
-document.getElementById('registerBtn').onclick = async function () {
-  const email = document.getElementById('emailInput').value.trim();
-  if (!email) { alert('Email required'); return; }
-  this.disabled = true;
-  this.textContent = 'Registering…';
-  const pub = localStorage.getItem(LS_PUB);
-  const priv = localStorage.getItem(LS_PRIV);
+  emailInput.disabled = true;
+  this.textContent = 'Working…';
+  status.textContent = 'Generating your cryptographic identity…';
+  status.className = 'small';
   try {
+    const kp = await generateKeyPair();
+    localStorage.setItem(LS_PUB, kp.publicKeyB64);
+    localStorage.setItem(LS_PRIV, kp.privateKeyB64);
+    document.getElementById('genPubView').textContent = kp.publicKeyB64;
+    document.getElementById('genPrivView').textContent = kp.privateKeyB64;
+
+    status.textContent = 'Sending verification email to ' + email + '…';
     await edgarSubmit('EMAIL REGISTERED EVENT', {
       'Email': email,
       'Generation source': window.location.href,
       'Submitted At': new Date().toISOString(),
-    }, pub, priv);
+    }, kp.publicKeyB64, kp.privateKeyB64);
     localStorage.setItem(LS_EMAIL, email);
-    document.getElementById('registerStatus').textContent =
-      'Registered. Check your inbox for the verification email — clicking the link in it completes the binding. Reload this page after verifying.';
-    document.getElementById('registerStatus').className = 'banner success';
+
+    document.getElementById('signinForm').style.display = 'none';
+    status.innerHTML =
+      '<strong>Check your inbox for ' + escapeHtml(email) + '.</strong> ' +
+      'Click the verification link to complete sign-in, then reload this page. ' +
+      'If you already have a Cohort Roster editor seat, you\'ll land in admin mode.';
+    status.className = 'banner success';
   } catch (err) {
-    document.getElementById('registerStatus').textContent = 'Registration failed: ' + err.message;
-    document.getElementById('registerStatus').className = 'banner error';
+    status.textContent = 'Sign-in failed: ' + err.message + ' — try again.';
+    status.className = 'banner error';
     this.disabled = false;
-    this.textContent = 'Retry register';
+    this.textContent = 'Retry →';
+    emailInput.disabled = false;
   }
 };
+
+document.getElementById('advancedToggle').onclick = function (ev) {
+  ev.preventDefault();
+  const rev = document.getElementById('advancedReveal');
+  const showing = rev.style.display !== 'none';
+  rev.style.display = showing ? 'none' : 'block';
+  this.textContent = showing ? 'show technical details' : 'hide technical details';
+};
+
+// Enter key submits
+document.getElementById('emailInput').addEventListener('keydown', function (ev) {
+  if (ev.key === 'Enter') document.getElementById('signinBtn').click();
+});
 
 document.getElementById('refreshQueueBtn').onclick = loadQueue;
 
