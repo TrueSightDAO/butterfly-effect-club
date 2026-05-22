@@ -95,7 +95,7 @@
 
   <section id="queueCard" style="display:none;">
     <h2>Attestation queue <span id="queueCount" class="pill"></span></h2>
-    <p class="small">Click <strong>Attest</strong> on a row to confirm that participant has completed the program. Their credential profile will be live within a minute.</p>
+    <p class="small">Click <strong>Attest</strong> on a row to confirm that participant has completed the program. Their credential profile will be live within a minute. · <a id="rosterSheetLink" href="#" target="_blank">Open the source sheet ↗</a></p>
     <div id="queueBody"></div>
     <button id="refreshQueueBtn" class="secondary" style="margin-top:.6rem;">Refresh queue</button>
   </section>
@@ -247,7 +247,7 @@ async function edgarSubmit(eventName, attributes, publicKeyB64, privateKeyB64) {
 
 async function callCentralGAS(action, params) {
   const endpoint = manifest && manifest.tokenomics_admin_endpoint;
-  if (!endpoint) throw new Error('tokenomics_admin_endpoint not yet deployed');
+  if (!endpoint) throw new Error('not_ready');
   const url = new URL(endpoint);
   url.searchParams.set('action', action);
   Object.keys(params || {}).forEach(function (k) { url.searchParams.set(k, params[k]); });
@@ -276,13 +276,7 @@ async function boot() {
   }
 
   const hasEndpoint = !!manifest.tokenomics_admin_endpoint;
-  const banner = document.getElementById('bootBanner');
-  if (!hasEndpoint) {
-    banner.className = 'banner warn';
-    banner.innerHTML = '<strong>Central tokenomics endpoint not yet deployed.</strong> Queue display + admin auth are limited until the operator deploys <code>program_admin_endpoint.gs</code> and populates <code>manifest.tokenomics_admin_endpoint</code>.';
-  } else {
-    banner.style.display = 'none';
-  }
+  document.getElementById('bootBanner').style.display = 'none';
 
   const pub = localStorage.getItem(LS_PUB);
   const priv = localStorage.getItem(LS_PRIV);
@@ -319,10 +313,25 @@ async function boot() {
     }
   }
 
+  // Surface the roster sheet link whenever we know the URL — useful even before queue loads
+  if (manifest.roster_sheet_url) {
+    const link = document.getElementById('rosterSheetLink');
+    if (link) link.href = manifest.roster_sheet_url;
+  }
+
   if (isAdmin) {
     setMode('admin', 'Admin');
     document.getElementById('queueCard').style.display = 'block';
     await loadQueue();
+  } else if (!hasEndpoint && identity.registered) {
+    // Endpoint not yet wired — we can't tell whether they're an admin. Show the
+    // queue card with a friendly "being set up" message rather than treating
+    // them as public-only.
+    setMode('public', 'Signed in');
+    document.getElementById('queueCard').style.display = 'block';
+    document.getElementById('queueBody').innerHTML =
+      '<p class="small">The attestation queue is being set up. Check back in a few minutes.</p>';
+    document.getElementById('refreshQueueBtn').style.display = 'none';
   } else {
     setMode('public', identity.registered ? 'Signed in' : 'Awaiting email verification');
     document.getElementById('publicCard').style.display = 'block';
@@ -362,7 +371,11 @@ async function loadQueue() {
     document.getElementById('queueCount').textContent = queueRows.length + ' pending';
     renderQueue();
   } catch (err) {
-    body.innerHTML = '<p class="banner error">Could not load queue: ' + escapeHtml(err.message) + '</p>';
+    if (err.message === 'not_ready') {
+      body.innerHTML = '<p class="small">The attestation queue is being set up. Check back in a few minutes.</p>';
+    } else {
+      body.innerHTML = '<p class="small">The queue is temporarily unavailable. Please try again shortly.</p>';
+    }
   }
 }
 
