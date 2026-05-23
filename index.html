@@ -69,6 +69,38 @@
     .row-actions { display: flex; gap: .4rem; }
     .small { font-size: .8rem; color: var(--muted); }
     #identityCard .label { font-size: .75rem; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; }
+    /* Queue tables: let wide tables scroll horizontally inside their panel so
+       the rightmost action column (Attest / View) is never clipped by the
+       section.tabbed overflow:hidden boundary. */
+    #queueBody, #attestedBody { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    #queueBody > table, #attestedBody > table { min-width: 560px; }
+    .attest-btn { white-space: nowrap; }
+    @media (max-width: 640px) {
+      body { padding: 1rem .75rem 3rem; }
+      header img.logo { width: 48px; height: 48px; }
+      h1 { font-size: 1.3rem; }
+      section { padding: .9rem 1rem; }
+      section.tabbed .tab-panel { padding: .9rem 1rem; }
+      table { font-size: .82rem; }
+      th, td { padding: .4rem .5rem; }
+      #queueBody > table, #attestedBody > table { min-width: 520px; }
+      /* Pin the action column to the right edge of the scroll viewport so
+         the Attest / View button is always visible without horizontal swipe. */
+      #queueBody > table th:last-child,
+      #queueBody > table td:last-child,
+      #attestedBody > table th:last-child,
+      #attestedBody > table td:last-child {
+        position: sticky; right: 0;
+        background: white;
+        box-shadow: -6px 0 6px -6px rgba(0,0,0,.12);
+      }
+      #queueBody > table thead th:last-child,
+      #attestedBody > table thead th:last-child { background: #FBF7EC; }
+      #queueBody > table tr.processed td:last-child,
+      #attestedBody > table tr.processed td:last-child { background: #F2F9F4; }
+      #queueBody > table tr.failed td:last-child { background: #FAEEEE; }
+      .attest-btn { padding: .4rem .7rem; font-size: .82rem; }
+    }
   </style>
 </head>
 <body>
