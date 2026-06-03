@@ -1,0 +1,105 @@
+name: Mint Cohort Trees
+
+# Attestation → tree-planting (PR2b). For each attested roster row that doesn't yet
+# have a tree (tree_qr_code empty), mint one serialized tree QR via the dao_protocol
+# orchestrator (mint-only — qr_code == pk_hash, landing_page == profile_url, holder =
+# the signing governor). MINT-ONLY is money-safe: no cash moves at mint; the operator
+# marks the tree SOLD separately. Idempotent → safe to run on a schedule.
+#
+# Engine: truesight_dao_client.modules.link_attestations_to_trees (repo TrueSightDAO/dao_protocol).
+# Manifest: manifests/butterfly-effect.yaml. Runbook: agentic_ai_context/PROGRAM_PARTNER_ONBOARDING.md §B.6.
+#
+# REQUIRED repo secrets (Settings → Secrets and variables → Actions):
+#   GOOGLE_CREDENTIALS_JSON_B64  — base64 of the butterfly-effect-club@get-data-io SA JSON (same as sync_cohort)
+#   ERA_PAYMENT_PROOF_B64        — base64 of the ERA payment receipt image (mint visual proof)
+#   DAO_GOVERNOR_EMAIL           — governor identity email (must be a DAO governor)
+#   DAO_GOVERNOR_PUBLIC_KEY      — governor RSA public key (base64 SPKI)
+#   DAO_GOVERNOR_PRIVATE_KEY     — governor RSA private key (base64 PKCS#8)   ⚠ sensitive
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run (preview) or execute (mint)"
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - execute
+  schedule:
+    - cron: "0 */6 * * *"  # every 6h — mint-only is money-safe; picks up newly-attested members
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mint-cohort-trees
+  cancel-in-progress: false
+
+jobs:
+  mint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dao_protocol orchestrator
+        run: |
+          pip install "git+https://github.com/TrueSightDAO/dao_protocol.git" \
+            pyyaml gspread google-auth google-api-python-client
+
+      - name: Decode service-account credentials
+        env:
+          GOOGLE_CREDENTIALS_JSON_B64: ${{ secrets.GOOGLE_CREDENTIALS_JSON_B64 }}
+        run: |
+          if [ -z "$GOOGLE_CREDENTIALS_JSON_B64" ]; then
+            echo "ERROR: GOOGLE_CREDENTIALS_JSON_B64 secret not set." >&2; exit 1
+          fi
+          echo "$GOOGLE_CREDENTIALS_JSON_B64" | base64 -d > /tmp/creds.json
+
+      - name: Decode mint proof image
+        env:
+          ERA_PAYMENT_PROOF_B64: ${{ secrets.ERA_PAYMENT_PROOF_B64 }}
+        run: |
+          if [ -z "$ERA_PAYMENT_PROOF_B64" ]; then
+            echo "ERROR: ERA_PAYMENT_PROOF_B64 secret not set." >&2; exit 1
+          fi
+          echo "$ERA_PAYMENT_PROOF_B64" | base64 -d > /tmp/era_payment.jpeg
+
+      - name: Write governor identity (.env for EdgarClient.from_env)
+        env:
+          DAO_GOVERNOR_EMAIL: ${{ secrets.DAO_GOVERNOR_EMAIL }}
+          DAO_GOVERNOR_PUBLIC_KEY: ${{ secrets.DAO_GOVERNOR_PUBLIC_KEY }}
+          DAO_GOVERNOR_PRIVATE_KEY: ${{ secrets.DAO_GOVERNOR_PRIVATE_KEY }}
+        run: |
+          if [ -z "$DAO_GOVERNOR_PRIVATE_KEY" ]; then
+            echo "ERROR: DAO_GOVERNOR_* secrets not set." >&2; exit 1
+          fi
+          umask 077
+          {
+            echo "EMAIL=$DAO_GOVERNOR_EMAIL"
+            echo "PUBLIC_KEY=$DAO_GOVERNOR_PUBLIC_KEY"
+            echo "PRIVATE_KEY=$DAO_GOVERNOR_PRIVATE_KEY"
+          } > .env
+
+      - name: Mint trees for newly-attested members
+        run: |
+          MODE="${{ github.event.inputs.mode }}"
+          # Schedule runs (no inputs) execute by default — mint-only is money-safe + idempotent.
+          if [ "$MODE" = "dry-run" ]; then
+            python -m truesight_dao_client.modules.link_attestations_to_trees \
+              --manifest manifests/butterfly-effect.yaml
+          else
+            python -m truesight_dao_client.modules.link_attestations_to_trees \
+              --manifest manifests/butterfly-effect.yaml --execute
+          fi
+
+      - name: Scrub secrets
+        if: always()
+        run: rm -f .env /tmp/creds.json /tmp/era_payment.jpeg
