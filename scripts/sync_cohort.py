@@ -177,7 +177,7 @@ def main():
     )
     parser.add_argument(
         "--tab",
-        default=os.environ.get("ERA_SHEET_TAB", COHORT_TAB_DEFAULT),
+        default=os.environ.get("ERA_SHEET_TAB") or COHORT_TAB_DEFAULT,
     )
     args = parser.parse_args()
 
