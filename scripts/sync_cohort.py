@@ -83,7 +83,13 @@ def open_sheet(sheet_id: str, tab_name: str):
         sys.exit(f"ERROR: credentials file not found: {creds_path}")
     creds = Credentials.from_service_account_file(creds_path, scopes=SHEETS_SCOPES)
     gc = gspread.authorize(creds)
-    book = gc.open_by_key(sheet_id)
+    try:
+        book = gc.open_by_key(sheet_id)
+    except gspread.exceptions.APIError as e:
+        sys.exit(
+            f"ERROR: failed to open sheet (id='{sheet_id}'): {e}\n"
+            f"       Check that ERA_SHEET_ID is set correctly and the service account has access."
+        )
     return book.worksheet(tab_name)
 
 
