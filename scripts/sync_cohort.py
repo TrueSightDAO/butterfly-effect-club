@@ -173,7 +173,7 @@ def main():
     )
     parser.add_argument(
         "--sheet-id",
-        default=os.environ.get("ERA_SHEET_ID", ERA_SHEET_ID_DEFAULT),
+        default=os.environ.get("ERA_SHEET_ID") or ERA_SHEET_ID_DEFAULT,
     )
     parser.add_argument(
         "--tab",
